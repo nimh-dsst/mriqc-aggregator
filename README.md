@@ -40,3 +40,15 @@ current SQLAlchemy schema, then loads a sampled raw run into `t1w`, `t2w`, and
 
 See [docs/erd.md](docs/erd.md) for the current and proposed normalized entity model.
 See [docs/ingestion.md](docs/ingestion.md) for the raw ingestion workflow.
+See [docs/backend.md](docs/backend.md) for the profiling workflow and FastAPI read layer.
+
+## Profiling And API
+
+```bash
+pixi run db-profile
+pixi run api-dev
+```
+
+`db-profile` writes per-modality database summaries into `docs/temp/db-profiles/`.
+`api-dev` starts a FastAPI backend for local frontend development, with docs at
+[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).

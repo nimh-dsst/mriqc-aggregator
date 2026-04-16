@@ -322,13 +322,15 @@ def _common_table_args(
     identity_columns = ["subject_id", "session_id", "run_id", "acq_id"]
     if include_task_identity:
         identity_columns.append("task_id")
-    return (
+    indexes: list[object] = [
         UniqueConstraint("source_api_id", name=f"uq_{table_name}_source_api_id"),
+        Index(f"ix_{table_name}_source_created_at", "source_created_at"),
         Index(f"ix_{table_name}_source_md5sum", "source_md5sum"),
         Index(f"ix_{table_name}_dedupe_exact_key", "dedupe_exact_key"),
         Index(f"ix_{table_name}_dedupe_series_key", "dedupe_series_key"),
         Index(f"ix_{table_name}_canonical_source_api_id", "canonical_source_api_id"),
         Index(f"ix_{table_name}_identity", *identity_columns),
+        Index(f"ix_{table_name}_manufacturer", "manufacturer"),
         Index(
             f"ix_{table_name}_scanner",
             "manufacturer",
@@ -336,7 +338,10 @@ def _common_table_args(
             "magnetic_field_strength",
         ),
         Index(f"ix_{table_name}_mriqc_version", "mriqc_version"),
-    )
+    ]
+    if include_task_identity:
+        indexes.append(Index(f"ix_{table_name}_task_id", "task_id"))
+    return tuple(indexes)
 
 
 class T1wRecord(SourceRecordMixin, CommonBidsMixin, StructuralIQMMixin, Base):

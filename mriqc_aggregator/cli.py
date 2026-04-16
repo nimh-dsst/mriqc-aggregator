@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .loading import load_raw_run
+from .profiling import ObservationView, write_database_profile
 from .workflows import MODALITIES, pull_representative_sample
 
 
@@ -94,6 +95,58 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not create database tables before loading.",
     )
+
+    profile_parser = subparsers.add_parser(
+        "profile-db",
+        help="Profile loaded PostgreSQL data for backend exploration.",
+    )
+    profile_parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("docs") / "temp",
+        help="Root directory for ignored profile outputs.",
+    )
+    profile_parser.add_argument(
+        "--database-url",
+        help="Database URL override. Defaults to MRIQC_DATABASE_URL.",
+    )
+    profile_parser.add_argument(
+        "--modalities",
+        nargs="+",
+        default=list(MODALITIES),
+        choices=list(MODALITIES),
+        help="Modalities to profile.",
+    )
+    profile_parser.add_argument(
+        "--view",
+        choices=[view.value for view in ObservationView],
+        default=ObservationView.RAW.value,
+        help="Representative row mode to use for profile outputs.",
+    )
+    profile_parser.add_argument(
+        "--top-n",
+        type=int,
+        default=10,
+        help="Maximum number of categorical values to keep per field.",
+    )
+    profile_parser.add_argument(
+        "--duplicate-group-limit",
+        type=int,
+        default=10,
+        help="Maximum number of duplicate groups to sample per duplicate kind.",
+    )
+    profile_parser.add_argument(
+        "--duplicate-member-limit",
+        type=int,
+        default=5,
+        help="Maximum rows to sample inside each duplicate group.",
+    )
+    profile_parser.add_argument(
+        "--extra-key-limit",
+        type=int,
+        default=25,
+        help="Maximum number of extra JSON keys to keep per extra column.",
+    )
     return parser
 
 
@@ -123,6 +176,20 @@ def main(argv: list[str] | None = None) -> int:
             create_schema_first=not args.skip_schema,
         )
         print(summary.to_dict())
+        return 0
+
+    if args.command == "profile-db":
+        run_root = write_database_profile(
+            output_root=args.output_root,
+            database_url=args.database_url,
+            modalities=args.modalities,
+            view=ObservationView(args.view),
+            top_n=args.top_n,
+            duplicate_group_limit=args.duplicate_group_limit,
+            duplicate_member_limit=args.duplicate_member_limit,
+            extra_key_limit=args.extra_key_limit,
+        )
+        print(f"Database profile written to {run_root}")
         return 0
 
     parser.error(f"Unsupported command: {args.command}")

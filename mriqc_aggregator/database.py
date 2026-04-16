@@ -34,6 +34,9 @@ def create_database_schema(url: str | None = None, *, echo: bool = False) -> Non
     engine = create_database_engine(url=url, echo=echo)
     with engine.begin() as connection:
         Base.metadata.create_all(connection)
+        for table in Base.metadata.sorted_tables:
+            for index in table.indexes:
+                index.create(connection, checkfirst=True)
 
 
 def create_session_factory(
