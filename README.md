@@ -1,6 +1,8 @@
 # mriqc-aggregator
 
-Reusable Python tooling for pulling representative MRIQC Web API samples into a local raw data cache.
+Reusable Python tooling for pulling representative MRIQC Web API samples,
+loading them into PostgreSQL, profiling the raw tables, and serving a thin
+FastAPI backend for future frontend work.
 
 ## Layout
 
@@ -31,7 +33,7 @@ See [docs/representative-sampling.md](docs/representative-sampling.md) for detai
 cp .env.example .env
 pixi run db-up
 pixi run db-init
-pixi run db-load -- --run-id 20260416T152222Z
+pixi run db-load -- --run-id <run-id>
 ```
 
 That starts a local PostgreSQL instance with Docker Compose and initializes the
@@ -52,3 +54,7 @@ pixi run api-dev
 `db-profile` writes per-modality database summaries into `docs/temp/db-profiles/`.
 `api-dev` starts a FastAPI backend for local frontend development, with docs at
 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
+The larger local representative run used to shake out the current ingestion and
+backend path is `data/runs/20260416T175935Z`, but the workflows above operate on
+any sampled `<run-id>`.

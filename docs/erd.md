@@ -195,7 +195,7 @@ For example:
 
 ## Postgres Target
 
-Local development now targets PostgreSQL through [compose.yaml](/Users/johnlee/.codex/worktrees/e67a/mriqc-aggregator/compose.yaml).
+Local development now targets PostgreSQL through [compose.yaml](../compose.yaml).
 
 Basic flow:
 
@@ -206,7 +206,9 @@ pixi run db-init
 ```
 
 The schema initialization uses
-[mriqc_aggregator/database.py](/Users/johnlee/.codex/worktrees/e67a/mriqc-aggregator/mriqc_aggregator/database.py)
+[mriqc_aggregator/database.py](../mriqc_aggregator/database.py)
 and the thin wrapper in
-[scripts/init_db.py](/Users/johnlee/.codex/worktrees/e67a/mriqc-aggregator/scripts/init_db.py).
+[scripts/init_db.py](../scripts/init_db.py).
 
+For backend-oriented exploration on top of the raw tables, see
+[docs/backend.md](backend.md).

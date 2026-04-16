@@ -43,6 +43,9 @@ Each run is written under `data/runs/<run-id>/`.
 - The current workflow favors broad archive coverage over exhaustive crawling.
 - The derived manifests are for inspection only. The raw source of truth is the
   saved page JSON under `raw/`.
+- Explicit `--pages-per-modality` requests are honored as-is unless you also
+  set `--max-pages-per-modality`.
 - If later work requires denser coverage, rerun with a larger
   `--pages-per-modality` or use the optional `--target-total-gb` budget.
-
+- The current larger exploratory run is `20260416T175935Z`, which pulled
+  `231,100` observations and about `676 MB` of raw JSON payload.

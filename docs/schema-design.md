@@ -31,11 +31,11 @@ either:
 
 ## Dedupe Strategy
 
-The representative pull already shows meaningful duplication:
+The larger local PostgreSQL sample now shows substantial duplication pressure:
 
-- `T1w`: 169 duplicate `md5sum` groups in the sample, largest group size 129
-- `T2w`: 135 duplicate `md5sum` groups, largest group size 18
-- `bold`: 218 duplicate `md5sum` groups, largest group size 6
+- `T1w`: 3,047 exact-duplicate groups, max group size 3,479
+- `T2w`: 13,993 exact-duplicate groups, max group size 71
+- `bold`: 11,380 exact-duplicate groups, max group size 76
 
 That suggests a two-stage dedupe strategy:
 
@@ -64,3 +64,10 @@ The ORM includes:
 That should be enough for initial warehouse loading without locking the pipeline
 into one irreversible dedupe policy.
 
+The current backend exposes three read modes directly on top of the raw tables:
+
+- `raw`: every loaded observation row
+- `exact`: one representative row per `dedupe_exact_key`
+- `series`: one representative row per `dedupe_series_key`
+
+Those are view-level query semantics only. They are not canonical tables.

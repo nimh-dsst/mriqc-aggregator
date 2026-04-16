@@ -20,13 +20,13 @@ The loader keeps:
 cp .env.example .env
 pixi run db-up
 pixi run db-init
-pixi run db-load -- --run-id 20260416T152222Z
+pixi run db-load -- --run-id <run-id>
 ```
 
 You can also point at an explicit path:
 
 ```bash
-pixi run db-load -- --run-root data/runs/20260416T152222Z
+pixi run db-load -- --run-root data/runs/<run-id>
 ```
 
 ## Idempotency
@@ -44,4 +44,7 @@ creating duplicates.
 - PostgreSQL is the primary target for this workflow.
 - SQLite is only used in tests as a lightweight harness for parser/load logic.
 - No canonical or normalized tables are introduced yet.
-
+- `db-init` is safe to rerun and now creates missing indexes on existing tables
+  in addition to creating fresh schemas.
+- The current larger exploratory run is `20260416T175935Z`, but the loader is
+  intentionally run-agnostic.
