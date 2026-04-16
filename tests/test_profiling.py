@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from mriqc_aggregator.app import create_app
@@ -154,6 +155,7 @@ def _t1w_item(
     manufacturer: str,
     session_id: str | None,
     extra_metric: str,
+    metric_overrides: dict[str, float | int] | None = None,
 ) -> dict[str, object]:
     bids_meta = {
         "modality": "T1w",
@@ -174,7 +176,7 @@ def _t1w_item(
         "_etag": "etag",
         "_created": created,
         "_updated": created,
-        **STRUCTURAL_METRICS,
+        **{**STRUCTURAL_METRICS, **(metric_overrides or {})},
         "custom_metric": extra_metric,
         "bids_meta": bids_meta,
         "provenance": {
@@ -194,13 +196,14 @@ def _bold_item(
     md5sum: str,
     manufacturer: str,
     task_id: str,
+    metric_overrides: dict[str, float | int] | None = None,
 ) -> dict[str, object]:
     return {
         "_id": source_id,
         "_etag": "etag",
         "_created": created,
         "_updated": created,
-        **BOLD_METRICS,
+        **{**BOLD_METRICS, **(metric_overrides or {})},
         "custom_metric": "bold-extra",
         "bids_meta": {
             "modality": "bold",
@@ -246,6 +249,7 @@ def _load_profile_fixture(tmp_path: Path) -> str:
                 manufacturer="Siemens",
                 session_id="session-1",
                 extra_metric="x",
+                metric_overrides={"cjv": 0.1, "cnr": 0.2},
             ),
             _t1w_item(
                 source_id="def456abc123def456abc123",
@@ -254,6 +258,7 @@ def _load_profile_fixture(tmp_path: Path) -> str:
                 manufacturer="Siemens",
                 session_id=None,
                 extra_metric="y",
+                metric_overrides={"cjv": 0.4, "cnr": 0.6},
             ),
             _t1w_item(
                 source_id="fedcba987654fedcba987654",
@@ -262,6 +267,7 @@ def _load_profile_fixture(tmp_path: Path) -> str:
                 manufacturer="GE",
                 session_id="session-2",
                 extra_metric="z",
+                metric_overrides={"cjv": 0.7, "cnr": 1.0},
             ),
         ],
     )
@@ -276,6 +282,7 @@ def _load_profile_fixture(tmp_path: Path) -> str:
                 md5sum="cccccccccccccccccccccccccccccccc",
                 manufacturer="Siemens",
                 task_id="rest",
+                metric_overrides={"fd_mean": 0.5},
             ),
             _bold_item(
                 source_id="222222222222222222222222",
@@ -283,6 +290,7 @@ def _load_profile_fixture(tmp_path: Path) -> str:
                 md5sum="dddddddddddddddddddddddddddddddd",
                 manufacturer="GE",
                 task_id="nback",
+                metric_overrides={"fd_mean": 1.5},
             ),
         ],
     )
@@ -319,6 +327,12 @@ def test_database_profiler_reports_counts_and_duplicates(tmp_path: Path) -> None
     extra_keys = profile["extra_key_counts"]["payload_extra"]["keys"]
     assert {"key": "custom_metric", "row_count": 3} in extra_keys
 
+    metric_summaries = {row["field"]: row for row in profile["qc_metric_summaries"]}
+    assert metric_summaries["cjv"]["value_count"] == 3
+    assert metric_summaries["cjv"]["min"] == 0.1
+    assert metric_summaries["cjv"]["max"] == 0.7
+    assert metric_summaries["cjv"]["mean"] == pytest.approx(0.4)
+
     exact_duplicates = profile["duplicates"]["exact"]
     assert exact_duplicates["duplicate_group_count"] == 1
     assert exact_duplicates["duplicate_row_count"] == 2
@@ -345,6 +359,13 @@ def test_fastapi_profile_endpoint_returns_expected_payload(tmp_path: Path) -> No
     database_url = _load_profile_fixture(tmp_path)
     client = TestClient(create_app(database_url=database_url))
 
+    modalities_response = client.get("/api/v1/modalities")
+    assert modalities_response.status_code == 200
+    t1w_modality = next(
+        row for row in modalities_response.json()["modalities"] if row["name"] == "T1w"
+    )
+    assert "cjv" in t1w_modality["metric_fields"]
+
     profile_response = client.get(
         "/api/v1/modalities/T1w/profile", params={"view": "exact"}
     )
@@ -363,3 +384,23 @@ def test_fastapi_profile_endpoint_returns_expected_payload(tmp_path: Path) -> No
         {"value": "nback", "count": 1},
         {"value": "rest", "count": 1},
     ]
+
+    metric_summaries_response = client.get(
+        "/api/v1/modalities/T1w/metrics",
+        params={"view": "raw"},
+    )
+    assert metric_summaries_response.status_code == 200
+    metric_summaries = {
+        row["field"]: row for row in metric_summaries_response.json()["metrics"]
+    }
+    assert metric_summaries["cjv"]["mean"] == pytest.approx(0.4)
+
+    metric_distribution_response = client.get(
+        "/api/v1/modalities/T1w/metrics/cjv",
+        params={"view": "raw", "bins": 3},
+    )
+    assert metric_distribution_response.status_code == 200
+    distribution = metric_distribution_response.json()["distribution"]
+    assert distribution["mean"] == pytest.approx(0.4)
+    assert distribution["quantiles"]["p50"] == pytest.approx(0.4)
+    assert sum(bucket["count"] for bucket in distribution["histogram"]) == 3

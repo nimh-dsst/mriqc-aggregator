@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from statistics import fmean, pstdev
 from typing import Any
 
 from sqlalchemy import Select, String, Text, case, func, or_, select
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from .database import create_session_factory
 from .models import BoldRecord, T1wRecord, T2wRecord
+from .parsing import BOLD_TOP_LEVEL_FIELDS, STRUCTURAL_TOP_LEVEL_FIELDS
 from .storage import make_run_id, write_json
 
 
@@ -102,6 +104,12 @@ EXTRA_FIELDS = {
     ),
 }
 
+QC_METRIC_FIELDS = {
+    "T1w": STRUCTURAL_TOP_LEVEL_FIELDS,
+    "T2w": STRUCTURAL_TOP_LEVEL_FIELDS,
+    "bold": BOLD_TOP_LEVEL_FIELDS,
+}
+
 DUPLICATE_SAMPLE_FIELDS = (
     "source_api_id",
     "source_created_at",
@@ -155,6 +163,11 @@ def supported_distribution_fields(modality: str) -> tuple[str, ...]:
 def supported_extra_fields(modality: str) -> tuple[str, ...]:
     _model_for_modality(modality)
     return EXTRA_FIELDS[modality]
+
+
+def supported_metric_fields(modality: str) -> tuple[str, ...]:
+    _model_for_modality(modality)
+    return QC_METRIC_FIELDS[modality]
 
 
 def _model_for_modality(
@@ -265,6 +278,58 @@ def _serialize_value(value: Any) -> Any:
     return value
 
 
+def _quantile(sorted_values: list[float], probability: float) -> float | None:
+    if not sorted_values:
+        return None
+    if len(sorted_values) == 1:
+        return float(sorted_values[0])
+    position = (len(sorted_values) - 1) * probability
+    lower_index = int(position)
+    upper_index = min(lower_index + 1, len(sorted_values) - 1)
+    lower_value = sorted_values[lower_index]
+    upper_value = sorted_values[upper_index]
+    fraction = position - lower_index
+    return float(lower_value + ((upper_value - lower_value) * fraction))
+
+
+def _histogram(values: list[float], *, bins: int) -> list[dict[str, Any]]:
+    if not values:
+        return []
+    min_value = min(values)
+    max_value = max(values)
+    if min_value == max_value:
+        return [
+            {
+                "start": float(min_value),
+                "end": float(max_value),
+                "count": len(values),
+            }
+        ]
+
+    bin_width = (max_value - min_value) / bins
+    counts = [0 for _ in range(bins)]
+    for value in values:
+        if value == max_value:
+            index = bins - 1
+        else:
+            index = int((value - min_value) / bin_width)
+            index = max(0, min(index, bins - 1))
+        counts[index] += 1
+
+    histogram: list[dict[str, Any]] = []
+    for index, count in enumerate(counts):
+        start = min_value + (index * bin_width)
+        end = max_value if index == bins - 1 else min_value + ((index + 1) * bin_width)
+        histogram.append(
+            {
+                "start": float(start),
+                "end": float(end),
+                "count": count,
+            }
+        )
+    return histogram
+
+
 class DatabaseProfiler:
     def __init__(
         self,
@@ -326,6 +391,11 @@ class DatabaseProfiler:
                 ),
                 "selected_view": self._view_summary(session, view_base),
                 "missingness": self._missingness(session, modality, view_base),
+                "qc_metric_summaries": self._metric_summaries(
+                    session,
+                    modality,
+                    view_base,
+                ),
                 "top_values": {
                     field: self._distribution(session, view_base, field, limit=top_n)
                     for field in TOP_VALUE_FIELDS[modality]
@@ -374,6 +444,44 @@ class DatabaseProfiler:
                 name=f"{modality.lower()}_{field_name}_{view.value}",
             )
             return self._distribution(session, base, field_name, limit=limit)
+
+    def metric_summaries(
+        self,
+        modality: str,
+        *,
+        view: ObservationView = ObservationView.RAW,
+        filters: ObservationFilters | None = None,
+    ) -> list[dict[str, Any]]:
+        _model_for_modality(modality)
+        effective_filters = filters or ObservationFilters()
+        with self._session_factory() as session:
+            base = _view_subquery(
+                MODALITY_MODEL_MAP[modality],
+                view,
+                effective_filters,
+                name=f"{modality.lower()}_metric_summaries_{view.value}",
+            )
+            return self._metric_summaries(session, modality, base)
+
+    def metric_distribution(
+        self,
+        modality: str,
+        field_name: str,
+        *,
+        view: ObservationView = ObservationView.RAW,
+        filters: ObservationFilters | None = None,
+        bins: int = 20,
+    ) -> dict[str, Any]:
+        _validate_metric_field(modality, field_name)
+        effective_filters = filters or ObservationFilters()
+        with self._session_factory() as session:
+            base = _view_subquery(
+                MODALITY_MODEL_MAP[modality],
+                view,
+                effective_filters,
+                name=f"{modality.lower()}_{field_name}_metric_{view.value}",
+            )
+            return self._metric_distribution(session, base, field_name, bins=bins)
 
     def missingness(
         self,
@@ -530,6 +638,104 @@ class DatabaseProfiler:
                 }
             )
         return results
+
+    def _metric_summaries(
+        self,
+        session: Session,
+        modality: str,
+        base: Any,
+    ) -> list[dict[str, Any]]:
+        expressions: list[Any] = [func.count().label("row_count")]
+        for field_name in supported_metric_fields(modality):
+            column = base.c[field_name]
+            expressions.extend(
+                [
+                    func.count(column).label(f"{field_name}__value_count"),
+                    func.min(column).label(f"{field_name}__min"),
+                    func.max(column).label(f"{field_name}__max"),
+                    func.avg(column).label(f"{field_name}__mean"),
+                ]
+            )
+        row = session.execute(select(*expressions)).one()
+        row_count = int(row._mapping["row_count"] or 0)
+        summaries: list[dict[str, Any]] = []
+        for field_name in supported_metric_fields(modality):
+            value_count = int(row._mapping[f"{field_name}__value_count"] or 0)
+            missing_count = row_count - value_count
+            summaries.append(
+                {
+                    "field": field_name,
+                    "value_count": value_count,
+                    "missing_count": missing_count,
+                    "missing_fraction": (
+                        float(missing_count / row_count) if row_count else 0.0
+                    ),
+                    "min": _serialize_value(row._mapping[f"{field_name}__min"]),
+                    "max": _serialize_value(row._mapping[f"{field_name}__max"]),
+                    "mean": _serialize_value(row._mapping[f"{field_name}__mean"]),
+                }
+            )
+        return summaries
+
+    def _metric_distribution(
+        self,
+        session: Session,
+        base: Any,
+        field_name: str,
+        *,
+        bins: int,
+    ) -> dict[str, Any]:
+        row_count = self._count_rows(session, base)
+        raw_values = session.execute(
+            select(base.c[field_name]).where(base.c[field_name].is_not(None))
+        ).scalars()
+        values = [float(value) for value in raw_values]
+        value_count = len(values)
+        missing_count = row_count - value_count
+        sorted_values = sorted(values)
+        if not values:
+            return {
+                "field": field_name,
+                "row_count": row_count,
+                "value_count": 0,
+                "missing_count": missing_count,
+                "missing_fraction": (
+                    float(missing_count / row_count) if row_count else 0.0
+                ),
+                "min": None,
+                "max": None,
+                "mean": None,
+                "stddev": None,
+                "quantiles": {
+                    "p05": None,
+                    "p25": None,
+                    "p50": None,
+                    "p75": None,
+                    "p95": None,
+                },
+                "histogram": [],
+            }
+        return {
+            "field": field_name,
+            "row_count": row_count,
+            "value_count": value_count,
+            "missing_count": missing_count,
+            "missing_fraction": (
+                float(missing_count / row_count) if row_count else 0.0
+            ),
+            "min": float(min(values)),
+            "max": float(max(values)),
+            "mean": float(fmean(values)),
+            "stddev": float(pstdev(values)) if len(values) > 1 else 0.0,
+            "quantiles": {
+                "p05": _quantile(sorted_values, 0.05),
+                "p25": _quantile(sorted_values, 0.25),
+                "p50": _quantile(sorted_values, 0.50),
+                "p75": _quantile(sorted_values, 0.75),
+                "p95": _quantile(sorted_values, 0.95),
+            },
+            "histogram": _histogram(values, bins=bins),
+        }
 
     def _distribution(
         self,
@@ -708,3 +914,8 @@ def write_database_profile(
             ),
         )
     return run_root
+
+
+def _validate_metric_field(modality: str, field_name: str) -> None:
+    if field_name not in supported_metric_fields(modality):
+        raise ValueError(f"Unsupported QC metric for {modality}: {field_name}")

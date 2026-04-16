@@ -55,6 +55,10 @@ pixi run api-dev
 `api-dev` starts a FastAPI backend for local frontend development, with docs at
 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
+The backend now exposes both categorical summaries and modality-specific QC
+metric summaries/histograms, all queryable in `raw`, `exact`, and `series`
+views.
+
 The larger local representative run used to shake out the current ingestion and
 backend path is `data/runs/20260416T175935Z`, but the workflows above operate on
 any sampled `<run-id>`.

@@ -16,6 +16,7 @@ from .profiling import (
     ObservationView,
     supported_distribution_fields,
     supported_extra_fields,
+    supported_metric_fields,
     supported_modalities,
 )
 
@@ -74,6 +75,7 @@ def create_app(*, database_url: str | None = None) -> FastAPI:
                     "distribution_fields": list(
                         supported_distribution_fields(modality)
                     ),
+                    "metric_fields": list(supported_metric_fields(modality)),
                     "extra_fields": list(supported_extra_fields(modality)),
                 }
                 for modality in supported_modalities()
@@ -178,6 +180,53 @@ def create_app(*, database_url: str | None = None) -> FastAPI:
                     view=view,
                     filters=filters,
                     limit=limit,
+                ),
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/v1/modalities/{modality}/metrics")
+    def modality_metric_summaries(
+        modality: str,
+        view: ObservationView = ObservationView.RAW,
+        filters: ObservationFilters = Depends(_filters_dependency),
+        profiler: DatabaseProfiler = Depends(get_profiler),
+    ) -> dict[str, object]:
+        try:
+            return {
+                "modality": modality,
+                "view": view.value,
+                "filters": filters.to_dict(),
+                "metrics": profiler.metric_summaries(
+                    modality,
+                    view=view,
+                    filters=filters,
+                ),
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/v1/modalities/{modality}/metrics/{field_name}")
+    def modality_metric_distribution(
+        modality: str,
+        field_name: str,
+        view: ObservationView = ObservationView.RAW,
+        bins: int = Query(20, ge=1, le=200),
+        filters: ObservationFilters = Depends(_filters_dependency),
+        profiler: DatabaseProfiler = Depends(get_profiler),
+    ) -> dict[str, object]:
+        try:
+            return {
+                "modality": modality,
+                "field": field_name,
+                "view": view.value,
+                "filters": filters.to_dict(),
+                "distribution": profiler.metric_distribution(
+                    modality,
+                    field_name,
+                    view=view,
+                    filters=filters,
+                    bins=bins,
                 ),
             }
         except ValueError as exc:
