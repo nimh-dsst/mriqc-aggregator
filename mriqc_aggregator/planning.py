@@ -11,6 +11,8 @@ from .api import (
     page_items,
 )
 
+DEFAULT_MAX_PAGES_PER_MODALITY = 128
+
 
 @dataclass(frozen=True)
 class ProbeResult:
@@ -132,10 +134,12 @@ def desired_pages_per_modality(
     page_bytes_by_modality: dict[str, int],
     pages_per_modality: int | None,
     target_total_gb: float | None,
-    max_pages_per_modality: int,
+    max_pages_per_modality: int | None,
 ) -> dict[str, int]:
     modality_list = list(modalities)
     if pages_per_modality is not None:
+        if max_pages_per_modality is None:
+            return {modality: pages_per_modality for modality in modality_list}
         return {
             modality: min(pages_per_modality, max_pages_per_modality)
             for modality in modality_list
@@ -146,12 +150,13 @@ def desired_pages_per_modality(
 
     total_bytes = int(target_total_gb * (1024**3))
     budget_per_modality = max(total_bytes // max(len(modality_list), 1), 1)
+    effective_max_pages = max_pages_per_modality or DEFAULT_MAX_PAGES_PER_MODALITY
     desired: dict[str, int] = {}
     for modality in modality_list:
         avg_page_bytes = max(page_bytes_by_modality[modality], 1)
         desired[modality] = max(
             1,
-            min(budget_per_modality // avg_page_bytes, max_pages_per_modality),
+            min(budget_per_modality // avg_page_bytes, effective_max_pages),
         )
     return desired
 

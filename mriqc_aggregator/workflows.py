@@ -186,7 +186,7 @@ def pull_representative_sample(
     modalities: list[str],
     pages_per_modality: int | None,
     target_total_gb: float | None,
-    max_pages_per_modality: int,
+    max_pages_per_modality: int | None,
     max_probe_rounds: int,
 ) -> RunLayout:
     run_id = make_run_id()

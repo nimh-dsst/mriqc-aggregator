@@ -46,8 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
     pull_parser.add_argument(
         "--max-pages-per-modality",
         type=int,
-        default=128,
-        help="Hard cap on sampled raw pages per modality.",
+        default=None,
+        help=(
+            "Optional hard cap on sampled raw pages per modality. "
+            "If omitted, explicit page requests are honored as-is."
+        ),
     )
     pull_parser.add_argument(
         "--max-probe-rounds",
