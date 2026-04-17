@@ -156,7 +156,7 @@ export function MeasuresSidebar({
                                     <SidebarMenuSubButton
                                       isActive={subItem.isActive}
                                       onClick={subItem.onSelect}
-                                      className="flex-1 justify-between gap-3 rounded-lg border-l-2 border-l-transparent pr-2 data-[active=true]:border-l-sidebar-primary data-[active=true]:bg-sidebar-accent/55 data-[active=true]:font-medium"
+                                      className="flex-1 justify-between gap-3 rounded-lg pr-2 data-[active=true]:bg-sidebar-accent/55 data-[active=true]:font-medium"
                                     >
                                       <span className="flex min-w-0 items-center gap-2">
                                         {subItem.isActive ? (

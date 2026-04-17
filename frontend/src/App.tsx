@@ -163,11 +163,15 @@ function App() {
 
     const modality = getModality(catalogState.catalog, activeModality)
     const metricFields = new Set(modality?.metrics.map((metric) => metric.field) ?? [])
+    const hasStoredSelection = Object.prototype.hasOwnProperty.call(
+      selectedMetricsByModality,
+      activeModality
+    )
     const explicitSelection = (selectedMetricsByModality[activeModality] ?? []).filter(
       (metric) => metricFields.has(metric)
     )
 
-    if (explicitSelection.length > 0) {
+    if (hasStoredSelection) {
       return explicitSelection
     }
 
