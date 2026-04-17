@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { AppSidebar } from "@/components/qc-measures-sidebar"
 import { MetricHistogramCard } from "@/components/metric-histogram-card"
+import { ReportUploadPanel } from "@/components/report-upload-panel"
 import { ViewSwitcher } from "@/components/view-switcher"
 import {
   describeMetric,
@@ -11,6 +12,7 @@ import {
   fetchMetricSummaries,
   fetchModalities,
 } from "@/lib/api"
+import { parseUploadedReports, type UploadedReportBundle } from "@/lib/uploaded-report"
 import { cn } from "@/lib/utils"
 import {
   SidebarInset,
@@ -19,6 +21,7 @@ import {
 } from "@/components/ui/sidebar"
 import type {
   MetricCatalog,
+  MetricDistribution,
   MetricId,
   MetricSummary,
   ModalityId,
@@ -82,9 +85,11 @@ function App() {
   )
   const [selectedView, setSelectedView] = useState<ViewId>(initialView)
   const [query, setQuery] = useState(initialQuery)
-  const [summaries, setSummaries] = useState<MetricSummary[]>([])
-  const [summariesError, setSummariesError] = useState<string | null>(null)
+  const [remoteSummaries, setRemoteSummaries] = useState<MetricSummary[]>([])
+  const [remoteSummariesError, setRemoteSummariesError] = useState<string | null>(null)
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null)
+  const [uploadedReports, setUploadedReports] = useState<UploadedReportBundle | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -114,6 +119,15 @@ function App() {
   }, [])
 
   const activeModality = useMemo<ModalityId>(() => {
+    const uploadedModalities = uploadedReports
+      ? (Object.keys(uploadedReports.modalities) as ModalityId[])
+      : []
+    if (uploadedModalities.length > 0) {
+      return uploadedModalities.includes(selectedModality)
+        ? selectedModality
+        : uploadedModalities[0]
+    }
+
     if (catalogState.status !== "ready") {
       return selectedModality
     }
@@ -123,10 +137,12 @@ function App() {
       catalogState.catalog[0]?.name ??
       selectedModality
     )
-  }, [catalogState, selectedModality])
+  }, [catalogState, selectedModality, uploadedReports])
+
+  const activeUploadedReport = uploadedReports?.modalities[activeModality] ?? null
 
   useEffect(() => {
-    if (catalogState.status !== "ready") {
+    if (activeUploadedReport || catalogState.status !== "ready") {
       return
     }
 
@@ -135,14 +151,14 @@ function App() {
     void fetchMetricSummaries(activeModality, selectedView).then(
       (nextSummaries) => {
         if (!cancelled) {
-          setSummaries(nextSummaries)
-          setSummariesError(null)
+          setRemoteSummaries(nextSummaries)
+          setRemoteSummariesError(null)
         }
       },
       (error: unknown) => {
         if (!cancelled) {
-          setSummaries([])
-          setSummariesError(
+          setRemoteSummaries([])
+          setRemoteSummariesError(
             error instanceof Error
               ? error.message
               : "Unexpected error while loading metric summaries."
@@ -154,7 +170,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeModality, catalogState, selectedView])
+  }, [activeModality, activeUploadedReport, catalogState, selectedView])
 
   const selectedMetrics = useMemo(() => {
     if (catalogState.status !== "ready") {
@@ -231,6 +247,24 @@ function App() {
     return () => window.clearTimeout(timeoutId)
   }, [selectionNotice])
 
+  const uploadedFileNames = useMemo(
+    () =>
+      uploadedReports
+        ? (Object.values(uploadedReports.modalities)
+            .map((report) => report?.fileName)
+            .filter((value): value is string => Boolean(value)))
+        : [],
+    [uploadedReports]
+  )
+
+  const activeDistributions = useMemo<Record<string, MetricDistribution>>(
+    () => activeUploadedReport?.distributions ?? {},
+    [activeUploadedReport]
+  )
+
+  const summaries = activeUploadedReport?.summaries ?? remoteSummaries
+  const summariesError = activeUploadedReport ? null : remoteSummariesError
+
   const updateSelectedMetrics = (nextMetrics: MetricId[]) => {
     setSelectedMetricsByModality((current) => ({
       ...current,
@@ -251,6 +285,38 @@ function App() {
     }
 
     updateSelectedMetrics([...selectedMetrics, metric])
+  }
+
+  const handleUpload = async (files: File[]) => {
+    if (catalogState.status !== "ready") {
+      return
+    }
+
+    const nextReports = await parseUploadedReports(files, catalogState.catalog)
+    setUploadedReports(nextReports)
+    setUploadError(null)
+    setSelectedModality((current) => {
+      const modalities = Object.keys(nextReports.modalities) as ModalityId[]
+      return modalities.includes(current) ? current : modalities[0]
+    })
+    setSelectedView("raw")
+    setSelectionNotice("Loaded uploaded MRIQC CSV data in raw-row mode.")
+  }
+
+  const handleUploadAttempt = async (files: File[]) => {
+    try {
+      await handleUpload(files)
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Unexpected error while reading CSV files."
+      )
+    }
+  }
+
+  const handleClearUpload = () => {
+    setUploadedReports(null)
+    setUploadError(null)
+    setSelectionNotice("Returned to API-backed dataset.")
   }
 
   const handleSelectAllCurrentModality = () => {
@@ -326,13 +392,17 @@ function App() {
             {summariesError ? (
               <p className="text-sm text-destructive">{summariesError}</p>
             ) : null}
+            {uploadError ? (
+              <p className="text-sm text-destructive">{uploadError}</p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.6rem] border border-border/70 bg-card/75 px-5 py-4 shadow-[0_18px_40px_-32px_rgba(36,66,52,0.35)]">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/75">
                   QC Distributions
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Comparing {selectedMetrics.length} selected metrics for {activeModality}.
+                  Comparing {selectedMetrics.length} selected metrics for {activeModality}
+                  {activeUploadedReport ? ` from ${activeUploadedReport.fileName}.` : "."}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -341,9 +411,31 @@ function App() {
                     {selectionNotice}
                   </span>
                 ) : null}
-                <ViewSwitcher selectedView={selectedView} onSelectView={setSelectedView} />
+                <ViewSwitcher
+                  selectedView={selectedView}
+                  onSelectView={(view) =>
+                    setSelectedView(activeUploadedReport ? "raw" : view)
+                  }
+                />
               </div>
             </div>
+            <ReportUploadPanel
+              disabled={catalogState.status !== "ready"}
+              fileNames={uploadedFileNames}
+              onFilesSelected={handleUploadAttempt}
+              onClear={handleClearUpload}
+            />
+            {activeUploadedReport ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-[1.4rem] border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-950">
+                <span className="font-medium">
+                  Uploaded dataset active: {activeUploadedReport.rowCount} rows from{" "}
+                  {activeUploadedReport.fileName}
+                </span>
+                <span className="text-emerald-800/80">
+                  Deduplicated views are unavailable for uploads, so charts use raw rows.
+                </span>
+              </div>
+            ) : null}
             {selectedMetricDescriptors.length ? (
               <div className={cn("grid gap-5", getGridClassName(selectedMetricDescriptors.length))}>
                 {selectedMetricDescriptors.map((descriptor) => (
@@ -354,6 +446,7 @@ function App() {
                     metricLabel={descriptor.label}
                     metricDescription={describeMetric(descriptor)}
                     selectedView={selectedView}
+                    distributionOverride={activeDistributions[descriptor.field] ?? null}
                     onRemove={() => toggleSelectedMetric(descriptor.field)}
                     compact={selectedMetricDescriptors.length > 1}
                   />
