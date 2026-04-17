@@ -40,7 +40,7 @@ That starts a local PostgreSQL instance with Docker Compose and initializes the
 current SQLAlchemy schema, then loads a sampled raw run into `t1w`, `t2w`, and
 `bold` using idempotent `source_api_id` upserts.
 
-## Containerized API Stack
+## Containerized Stack
 
 ```bash
 cp .env.example .env
@@ -51,6 +51,7 @@ That builds and starts:
 
 1. `postgres` on `localhost:${POSTGRES_PORT:-5432}`
 2. `api` on `http://127.0.0.1:${API_PORT:-8000}/docs`
+3. `frontend` on `http://127.0.0.1:${FRONTEND_PORT:-5173}`
 
 The API container initializes the current SQLAlchemy schema on startup before
 serving requests. The database remains accessible from the host via the same
@@ -62,7 +63,8 @@ Local development uses `compose.yaml` plus the automatically loaded
 
 1. `postgres` is published directly for host-side tooling
 2. `api` is published directly with the default Uvicorn runtime
-3. `nginx` is not part of the local stack by default
+3. `frontend` runs as a Vite dev server with `/api` proxied to the API container
+4. `nginx` is not part of the local stack by default
 
 For the production shape, use the explicit production override:
 
@@ -74,7 +76,7 @@ That changes the runtime to:
 
 1. `postgres` persisted at `POSTGRES_DATA_DIR` when set
 2. `api` running Gunicorn inside the app container
-3. `nginx` publishing `80/443` and proxying to the app container
+3. `nginx` publishing `80/443`, serving the built dashboard at `/`, and proxying `/api/` to the app container
 
 The production override keeps `postgres` and `api` reachable only on
 `127.0.0.1` from the host, while public traffic goes through `nginx`.
