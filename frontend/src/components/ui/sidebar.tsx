@@ -23,7 +23,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { PanelLeftIcon } from "lucide-react"
+import { GripVerticalIcon, PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -411,19 +411,21 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
 
         toggleSidebar()
       }}
-      title="Drag to resize, click to toggle"
+      title="Drag to resize sidebar, click to toggle"
       className={cn(
-        "group absolute inset-y-0 z-20 hidden w-5 touch-none items-center justify-center transition-all ease-linear group-data-[side=left]:-right-5 group-data-[side=right]:left-0 sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
+        "group absolute inset-y-0 z-20 hidden w-8 touch-none items-center justify-center transition-all ease-linear group-data-[side=left]:-right-8 group-data-[side=right]:left-0 sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
-        "group-data-[collapsible=offcanvas]:translate-x-0 hover:group-data-[collapsible=offcanvas]:bg-sidebar/40",
-        "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
-        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
+        "group-data-[collapsible=offcanvas]:translate-x-0",
+        "[[data-side=left][data-collapsible=offcanvas]_&]:-right-3",
+        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-3",
         className
       )}
       {...props}
     >
-      <span className="pointer-events-none h-16 w-1 rounded-full bg-sidebar-border/75 shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-sidebar-border)_65%,transparent)] transition-colors duration-150 group-hover:bg-sidebar-primary/80" />
+      <span className="pointer-events-none flex h-12 w-4 items-center justify-center rounded-full border border-sidebar-border/80 bg-sidebar/92 text-sidebar-foreground/55 shadow-[0_10px_24px_-18px_rgba(36,66,52,0.65)] transition-all duration-150 group-hover:border-sidebar-primary/55 group-hover:bg-sidebar-accent/88 group-hover:text-sidebar-primary">
+        <GripVerticalIcon className="size-3.5" />
+      </span>
     </button>
   )
 }
