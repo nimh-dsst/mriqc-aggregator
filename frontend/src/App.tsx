@@ -172,11 +172,6 @@ function App() {
     return () => window.removeEventListener("popstate", handlePopState)
   }, [])
 
-  const selectedMetricSummary = useMemo(
-    () => summaries.find((summary) => summary.field === activeMetric) ?? null,
-    [activeMetric, summaries]
-  )
-
   if (catalogState.status === "loading") {
     return (
       <SidebarProvider>
@@ -227,28 +222,6 @@ function App() {
         </header>
         <main className="min-h-[calc(100vh-3.5rem)] bg-[radial-gradient(circle_at_top,rgba(73,119,104,0.12),transparent_42%),linear-gradient(180deg,rgba(249,247,243,0.96),rgba(239,235,226,0.82))] px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto flex max-w-6xl flex-col gap-6">
-            <div className="flex flex-wrap gap-3">
-              <SummaryChip
-                label="Metric"
-                value={selectedMetricDescriptor?.label ?? "Select a metric"}
-              />
-              <SummaryChip
-                label="Category"
-                value={
-                  selectedMetricDescriptor
-                    ? `${selectedMetricDescriptor.family} · ${selectedMetricDescriptor.subfamily}`
-                    : "N/A"
-                }
-              />
-              <SummaryChip
-                label="Values"
-                value={String(selectedMetricSummary?.value_count ?? 0)}
-              />
-              <SummaryChip
-                label="Missing"
-                value={String(selectedMetricSummary?.missing_count ?? 0)}
-              />
-            </div>
             {summariesError ? (
               <p className="text-sm text-destructive">{summariesError}</p>
             ) : null}
@@ -270,17 +243,6 @@ function App() {
         </main>
       </SidebarInset>
     </SidebarProvider>
-  )
-}
-
-function SummaryChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
-    </div>
   )
 }
 
