@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { XIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { fetchMetricDistribution, type MetricDistribution } from "@/lib/api"
@@ -149,11 +149,6 @@ export function MetricHistogramCard({
                 </p>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <InfoPill>{modality}</InfoPill>
-              <InfoPill>{selectedView}</InfoPill>
-              <InfoPill>{distribution.value_count} values</InfoPill>
-            </div>
             <p className={compact ? "mt-2 max-w-2xl text-xs leading-5 text-muted-foreground" : "mt-3 max-w-2xl text-sm leading-6 text-muted-foreground"}>
               {metricDescription ??
                 `Normalized binned distribution for ${modality} observations in the ${selectedView} view.`}
@@ -230,13 +225,5 @@ function StatCard({ label, value }: { label: string; value: string }) {
       </p>
       <p className="mt-1 truncate text-sm font-semibold text-foreground">{value}</p>
     </div>
-  )
-}
-
-function InfoPill({ children }: { children: ReactNode }) {
-  return (
-    <span className="rounded-full border border-border/70 bg-background/75 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground shadow-sm">
-      {children}
-    </span>
   )
 }
