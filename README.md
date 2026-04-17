@@ -94,6 +94,8 @@ The production override keeps `postgres` and `api` reachable only on
 See [docs/erd.md](docs/erd.md) for the current and proposed normalized entity model.
 See [docs/ingestion.md](docs/ingestion.md) for the raw ingestion workflow.
 See [docs/backend.md](docs/backend.md) for the profiling workflow and FastAPI read layer.
+See [docs/operations.md](docs/operations.md) for the production host layout,
+safe redeploy procedure, and current cache/performance notes.
 See [docs/data-migration.md](docs/data-migration.md) for the MongoDB-to-PostgreSQL migration rationale, typing decisions, and scaling risks.
 
 ## Profiling And API
@@ -109,7 +111,9 @@ pixi run api-dev
 
 The backend now exposes both categorical summaries and modality-specific QC
 metric summaries/histograms, all queryable in `raw`, `exact`, and `series`
-views.
+views. Read-heavy endpoints now use short-lived timed caches, and the frontend
+memoizes identical GET requests so repeated dashboard interactions do not
+recompute the same payloads immediately.
 
 The larger local representative run used to shake out the current ingestion and
 backend path is `data/runs/20260416T175935Z`, but the workflows above operate on
