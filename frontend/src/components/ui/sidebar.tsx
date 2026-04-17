@@ -62,6 +62,24 @@ function clampSidebarWidth(width: number) {
   return Math.min(Math.max(width, SIDEBAR_WIDTH_MIN_PX), SIDEBAR_WIDTH_MAX_PX)
 }
 
+function getStoredSidebarWidth() {
+  if (typeof window === "undefined") {
+    return SIDEBAR_WIDTH_DEFAULT_PX
+  }
+
+  const storedWidth = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+  if (!storedWidth) {
+    return SIDEBAR_WIDTH_DEFAULT_PX
+  }
+
+  const parsedWidth = Number.parseInt(storedWidth, 10)
+  if (!Number.isFinite(parsedWidth)) {
+    return SIDEBAR_WIDTH_DEFAULT_PX
+  }
+
+  return clampSidebarWidth(parsedWidth)
+}
+
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
@@ -77,9 +95,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
-  const [desktopWidth, setDesktopWidthState] = React.useState(
-    SIDEBAR_WIDTH_DEFAULT_PX
-  )
+  const [desktopWidth, setDesktopWidthState] = React.useState(getStoredSidebarWidth)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -89,20 +105,6 @@ function SidebarProvider({
     const nextWidth = clampSidebarWidth(width)
     setDesktopWidthState(nextWidth)
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth))
-  }, [])
-
-  React.useEffect(() => {
-    const storedWidth = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
-    if (!storedWidth) {
-      return
-    }
-
-    const parsedWidth = Number.parseInt(storedWidth, 10)
-    if (!Number.isFinite(parsedWidth)) {
-      return
-    }
-
-    setDesktopWidthState(clampSidebarWidth(parsedWidth))
   }, [])
 
   const setOpen = React.useCallback(

@@ -155,7 +155,12 @@ export function MetricHistogramCard({
           </div>
         </div>
         <div className={compact ? "mt-3 h-[220px] w-full rounded-[1.1rem] border border-border/60 bg-background/55 p-2.5" : "mt-6 h-[320px] w-full rounded-[1.4rem] border border-border/60 bg-background/55 p-3"}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+            minWidth={0}
+            minHeight={compact ? 200 : 280}
+          >
             <BarChart data={chartData} margin={{ top: 12, right: 12, left: -16, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke="color-mix(in_oklab,var(--color-border)_85%,white)" strokeDasharray="3 3" />
               <XAxis
@@ -185,8 +190,8 @@ export function MetricHistogramCard({
                 ]}
               />
               <Bar dataKey="probability" radius={[10, 10, 0, 0]}>
-                {chartData.map((entry) => (
-                  <Cell key={entry.label} fill={entry.fill} />
+                {chartData.map((entry, index) => (
+                  <Cell key={`${entry.label}-${index}`} fill={entry.fill} />
                 ))}
                 {showCountLabels ? (
                   <LabelList dataKey="count" position="top" className="fill-muted-foreground text-[11px]" />
