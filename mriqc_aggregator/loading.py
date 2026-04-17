@@ -407,7 +407,11 @@ def _flush_batch(
     summary: ModalityLoadSummary,
     *,
     write_rows: Callable[
-        [Session, type[T1wRecord] | type[T2wRecord] | type[BoldRecord], list[dict[str, Any]]],
+        [
+            Session,
+            type[T1wRecord] | type[T2wRecord] | type[BoldRecord],
+            list[dict[str, Any]],
+        ],
         tuple[int, int],
     ] = _upsert_rows,
 ) -> None:
