@@ -473,130 +473,135 @@ function App() {
             {uploadError ? (
               <p className="text-sm text-destructive">{uploadError}</p>
             ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.6rem] border border-border/70 bg-card/75 px-5 py-4 shadow-[0_18px_40px_-32px_rgba(36,66,52,0.35)]">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/75">
-                  QC Distributions
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Comparing {selectedMetrics.length} selected metrics for {activeModality}
-                  {activeUploadedReport ? ` from ${activeUploadedReport.fileName}.` : "."}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Sheet>
-                  <SheetTrigger asChild>
-                    <Button type="button" variant="outline" className="rounded-xl">
-                      Your data
-                      {uploadedModalityCount > 0 ? `${uploadedModalityCount} loaded` : "none"}
-                      {pendingUploads.length > 0 ? ` · ${pendingUploads.length} pending` : ""}
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-full sm:max-w-xl">
-                    <SheetHeader className="border-b border-border/70 pb-4">
-                      <SheetTitle>Your Data</SheetTitle>
-                      <SheetDescription>
-                        Upload MRIQC CSV files by modality and prepare them for later
-                        comparison against the global MRIQC reference.
-                      </SheetDescription>
-                    </SheetHeader>
-                    <div className="flex-1 overflow-y-auto p-4">
-                      <ReportUploadPanel
-                        disabled={catalogState.status !== "ready"}
-                        uploadedReports={uploadedReports}
-                        pendingFiles={pendingUploads}
-                        onFilesSelected={handleFilesSelectedAttempt}
-                        onDraftModalityChange={handleDraftModalityChange}
-                        onLoadDrafts={handleLoadDraftsAttempt}
-                        onDismissDraft={handleDismissDraft}
-                        onClearUploadedModality={handleClearUploadedModality}
-                        onClearAllUploaded={handleClearAllUploaded}
-                      />
-                    </div>
-                  </SheetContent>
-                </Sheet>
-                {uploadedModalityCount > 0 ? (
-                  <span className="rounded-full border border-emerald-300/70 bg-emerald-100/80 px-3 py-1 text-xs font-medium text-emerald-900">
-                    {uploadedModalityCount} uploaded modalit{uploadedModalityCount === 1 ? "y" : "ies"}
-                  </span>
-                ) : null}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/75 p-1">
-                    <button
-                      type="button"
-                      className={
-                        showGlobalData
-                          ? "rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-900"
-                          : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground"
-                      }
-                      onClick={() => setShowGlobalData((current) => !current)}
-                    >
-                      Global
-                    </button>
-                    <button
-                      type="button"
-                      className={
-                        effectiveShowUploadedData
-                          ? "rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-900"
-                          : canShowUploadedData
-                            ? "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground"
-                            : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground opacity-55"
-                      }
-                      onClick={() =>
-                        canShowUploadedData
-                          ? setShowUploadedData((current) => !current)
-                          : undefined
-                      }
-                      disabled={!canShowUploadedData}
-                      aria-label={
-                        canShowUploadedData
-                          ? "Toggle uploaded data"
-                          : `Uploaded data unavailable for ${activeModality} until you upload a CSV`
-                      }
-                      title={
-                        canShowUploadedData
-                          ? undefined
-                          : `Upload a ${activeModality} CSV to enable Yours`
-                      }
-                    >
-                      Yours
-                    </button>
+            <div className="rounded-[1.6rem] border border-border/70 bg-card/75 px-5 py-4 shadow-[0_18px_40px_-32px_rgba(36,66,52,0.35)]">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/75">
+                      QC Distributions
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Comparing {selectedMetrics.length} selected metrics for {activeModality}
+                      {activeUploadedReport ? ` from ${activeUploadedReport.fileName}.` : "."}
+                    </p>
                   </div>
-                  {!canShowUploadedData ? (
-                    <span className="text-xs text-muted-foreground">
-                      Upload a {activeModality} CSV to enable <span className="font-medium text-foreground">Yours</span>.
-                    </span>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <Button type="button" variant="outline" className="rounded-xl">
+                          Upload data
+                          {uploadedModalityCount > 0 ? ` · ${uploadedModalityCount} loaded` : ""}
+                          {pendingUploads.length > 0 ? ` · ${pendingUploads.length} pending` : ""}
+                        </Button>
+                      </SheetTrigger>
+                      <SheetContent side="right" className="w-full sm:max-w-xl">
+                        <SheetHeader className="border-b border-border/70 pb-4">
+                          <SheetTitle>Your Data</SheetTitle>
+                          <SheetDescription>
+                            Upload MRIQC CSV files by modality and prepare them for later
+                            comparison against the global MRIQC reference.
+                          </SheetDescription>
+                        </SheetHeader>
+                        <div className="flex-1 overflow-y-auto p-4">
+                          <ReportUploadPanel
+                            disabled={catalogState.status !== "ready"}
+                            uploadedReports={uploadedReports}
+                            pendingFiles={pendingUploads}
+                            onFilesSelected={handleFilesSelectedAttempt}
+                            onDraftModalityChange={handleDraftModalityChange}
+                            onLoadDrafts={handleLoadDraftsAttempt}
+                            onDismissDraft={handleDismissDraft}
+                            onClearUploadedModality={handleClearUploadedModality}
+                            onClearAllUploaded={handleClearAllUploaded}
+                          />
+                        </div>
+                      </SheetContent>
+                    </Sheet>
+                    {uploadedModalityCount > 0 ? (
+                      <span className="rounded-full border border-emerald-300/70 bg-emerald-100/80 px-3 py-1 text-xs font-medium text-emerald-900">
+                        {uploadedModalityCount} uploaded modalit{uploadedModalityCount === 1 ? "y" : "ies"}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-                {effectiveShowUploadedData && activeUploadedReport ? (
-                  <span className="text-xs text-muted-foreground">
-                    Uploaded data available for {activeModality}.
-                  </span>
-                ) : !canShowUploadedData ? (
-                  <span className="text-xs text-muted-foreground">
-                    No uploaded {activeModality} data yet. Add a CSV to use <span className="font-medium text-foreground">Yours</span>.
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {showGlobalData ? "Showing global MRIQC reference data." : "Global MRIQC reference hidden."}
-                  </span>
-                )}
-                {pendingUploads.length > 0 ? (
-                  <span className="rounded-full border border-amber-300/70 bg-amber-100/80 px-3 py-1 text-xs font-medium text-amber-900">
-                    {pendingUploads.length} file{pendingUploads.length === 1 ? "" : "s"} pending review
-                  </span>
-                ) : null}
-                {selectionNotice ? (
-                  <span className="rounded-full border border-amber-300/70 bg-amber-100/80 px-3 py-1 text-xs font-medium text-amber-900">
-                    {selectionNotice}
-                  </span>
-                ) : null}
-                <ViewSwitcher
-                  selectedView={effectiveView}
-                  onSelectView={(view) =>
-                    setSelectedView(effectiveShowUploadedData ? "raw" : view)
-                  }
-                />
+
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/75 p-1">
+                      <button
+                        type="button"
+                        className={
+                          showGlobalData
+                            ? "rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-900"
+                            : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground"
+                        }
+                        onClick={() => setShowGlobalData((current) => !current)}
+                      >
+                        Global
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          effectiveShowUploadedData
+                            ? "rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-900"
+                            : canShowUploadedData
+                              ? "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground"
+                              : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground opacity-55"
+                        }
+                        onClick={() =>
+                          canShowUploadedData
+                            ? setShowUploadedData((current) => !current)
+                            : undefined
+                        }
+                        disabled={!canShowUploadedData}
+                        aria-label={
+                          canShowUploadedData
+                            ? "Toggle uploaded data"
+                            : `Uploaded data unavailable for ${activeModality} until you upload a CSV`
+                        }
+                        title={
+                          canShowUploadedData
+                            ? undefined
+                            : `Upload a ${activeModality} CSV to enable Yours`
+                        }
+                      >
+                        Yours
+                      </button>
+                    </div>
+                    {pendingUploads.length > 0 ? (
+                      <span className="rounded-full border border-amber-300/70 bg-amber-100/80 px-3 py-1 text-xs font-medium text-amber-900">
+                        {pendingUploads.length} file{pendingUploads.length === 1 ? "" : "s"} pending review
+                      </span>
+                    ) : null}
+                    {selectionNotice ? (
+                      <span className="rounded-full border border-amber-300/70 bg-amber-100/80 px-3 py-1 text-xs font-medium text-amber-900">
+                        {selectionNotice}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-3 lg:max-w-2xl">
+                    <div className="text-sm text-muted-foreground lg:text-right">
+                    {effectiveShowUploadedData && activeUploadedReport ? (
+                      <span>
+                        Uploaded data available for {activeModality}.
+                      </span>
+                    ) : !canShowUploadedData ? (
+                      null
+                    ) : (
+                      <span>
+                        {showGlobalData ? "Showing global MRIQC reference data." : "Global MRIQC reference hidden."}
+                      </span>
+                    )}
+                    </div>
+                    <ViewSwitcher
+                      selectedView={effectiveView}
+                      onSelectView={(view) =>
+                        setSelectedView(effectiveShowUploadedData ? "raw" : view)
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             {activeUploadedReport ? (
