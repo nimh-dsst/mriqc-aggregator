@@ -2,7 +2,6 @@ import { useEffect, useState } from "react"
 import { XIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { fetchMetricDistribution, type MetricDistribution } from "@/lib/api"
-import { ModalityIcon } from "@/components/modality-icon"
 import { Button } from "@/components/ui/button"
 import type { MetricId, ModalityId, ViewId } from "@/types/ui"
 
@@ -133,21 +132,13 @@ export function MetricHistogramCard({
       <div className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary/75">
-              Probability Distribution
-            </p>
-            <div className="mt-2 flex items-start gap-3">
-              <div className={compact ? "flex size-8 shrink-0 items-center justify-center rounded-xl bg-background/85 text-primary shadow-sm ring-1 ring-border/70" : "flex size-10 shrink-0 items-center justify-center rounded-2xl bg-background/85 text-primary shadow-sm ring-1 ring-border/70"}>
-                <ModalityIcon modality={modality} className={compact ? "size-4" : "size-5"} />
-              </div>
-              <div className="min-w-0">
-                <h2 className={compact ? "font-heading text-[1.2rem] font-semibold leading-tight tracking-tight text-foreground pr-7" : "font-heading text-[1.7rem] font-semibold tracking-tight text-foreground"}>
-                  {metricLabel}
-                </h2>
-                <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  {metric}
-                </p>
-              </div>
+            <div className="min-w-0">
+              <h2 className={compact ? "font-heading text-[1.2rem] font-semibold leading-tight tracking-tight text-foreground pr-7" : "font-heading text-[1.7rem] font-semibold tracking-tight text-foreground"}>
+                {metricLabel}
+              </h2>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                {metric}
+              </p>
             </div>
             <p className={compact ? "mt-2 max-w-2xl text-xs leading-5 text-muted-foreground" : "mt-3 max-w-2xl text-sm leading-6 text-muted-foreground"}>
               {metricDescription ??

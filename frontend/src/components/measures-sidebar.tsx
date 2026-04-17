@@ -17,7 +17,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenuBadge,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -140,8 +139,13 @@ export function MeasuresSidebar({
                               isActive={item.isActive}
                               className="rounded-xl border border-transparent data-[active=true]:border-sidebar-border/60 data-[active=true]:bg-sidebar-accent/70"
                             >
-                              <span>{item.title}</span>
-                              <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                              <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                              {item.badge ? (
+                                <span className="inline-flex min-w-6 shrink-0 items-center justify-center rounded-md bg-sidebar/85 px-1.5 py-0.5 text-[11px] tabular-nums text-sidebar-foreground/75">
+                                  {item.badge}
+                                </span>
+                              ) : null}
+                              <ChevronRightIcon className="ml-1 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                             </SidebarMenuButton>
                           </CollapsibleTrigger>
                           <CollapsibleContent>
@@ -198,11 +202,6 @@ export function MeasuresSidebar({
                       {item.title}
                     </SidebarMenuButton>
                   )}
-                  {item.badge ? (
-                    <SidebarMenuBadge className="rounded-md bg-sidebar/85 px-1.5 text-[11px] text-sidebar-foreground/75">
-                      {item.badge}
-                    </SidebarMenuBadge>
-                  ) : null}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
