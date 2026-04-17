@@ -6,6 +6,7 @@ platforms = ["osx-arm64", "osx-64", "linux-64"]
 python = ">=3.11,<3.14"
 pytest = ">=8.3,<9"
 ruff = ">=0.11,<0.12"
+pre-commit = ">=4.2,<5"
 
 [pypi-dependencies]
 mriqc-aggregator = { path = ".", editable = true }
@@ -23,6 +24,8 @@ db-init = "python scripts/init_db.py"
 db-load = "python scripts/load_raw_run.py"
 db-profile = "python scripts/profile_db.py"
 api-dev = "uvicorn mriqc_aggregator.app:create_app --factory --reload"
+stack-up = "docker compose up --build -d"
+stack-logs = "docker compose logs -f api postgres"
 test = "pytest -q"
 lint = "ruff check ."
 format = "ruff format ."
