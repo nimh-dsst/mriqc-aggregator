@@ -12,13 +12,27 @@ import {
   fetchMetricSummaries,
   fetchModalities,
 } from "@/lib/api"
-import { parseUploadedReports, type UploadedReportBundle } from "@/lib/uploaded-report"
+import {
+  buildUploadDrafts,
+  finalizeUploadedReports,
+  type UploadedFileDraft,
+  type UploadedReportBundle,
+} from "@/lib/uploaded-report"
 import { cn } from "@/lib/utils"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import type {
   MetricCatalog,
   MetricDistribution,
@@ -89,7 +103,10 @@ function App() {
   const [remoteSummariesError, setRemoteSummariesError] = useState<string | null>(null)
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null)
   const [uploadedReports, setUploadedReports] = useState<UploadedReportBundle | null>(null)
+  const [pendingUploads, setPendingUploads] = useState<UploadedFileDraft[]>([])
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [showGlobalData, setShowGlobalData] = useState(true)
+  const [showUploadedData, setShowUploadedData] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -119,15 +136,6 @@ function App() {
   }, [])
 
   const activeModality = useMemo<ModalityId>(() => {
-    const uploadedModalities = uploadedReports
-      ? (Object.keys(uploadedReports.modalities) as ModalityId[])
-      : []
-    if (uploadedModalities.length > 0) {
-      return uploadedModalities.includes(selectedModality)
-        ? selectedModality
-        : uploadedModalities[0]
-    }
-
     if (catalogState.status !== "ready") {
       return selectedModality
     }
@@ -137,12 +145,12 @@ function App() {
       catalogState.catalog[0]?.name ??
       selectedModality
     )
-  }, [catalogState, selectedModality, uploadedReports])
+  }, [catalogState, selectedModality])
 
   const activeUploadedReport = uploadedReports?.modalities[activeModality] ?? null
 
   useEffect(() => {
-    if (activeUploadedReport || catalogState.status !== "ready") {
+    if (catalogState.status !== "ready" || !showGlobalData) {
       return
     }
 
@@ -170,7 +178,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeModality, activeUploadedReport, catalogState, selectedView])
+  }, [activeModality, catalogState, selectedView, showGlobalData])
 
   const selectedMetrics = useMemo(() => {
     if (catalogState.status !== "ready") {
@@ -247,23 +255,22 @@ function App() {
     return () => window.clearTimeout(timeoutId)
   }, [selectionNotice])
 
-  const uploadedFileNames = useMemo(
-    () =>
-      uploadedReports
-        ? (Object.values(uploadedReports.modalities)
-            .map((report) => report?.fileName)
-            .filter((value): value is string => Boolean(value)))
-        : [],
-    [uploadedReports]
-  )
-
   const activeDistributions = useMemo<Record<string, MetricDistribution>>(
     () => activeUploadedReport?.distributions ?? {},
     [activeUploadedReport]
   )
+  const uploadedModalityCount = useMemo(
+    () => Object.keys(uploadedReports?.modalities ?? {}).length,
+    [uploadedReports]
+  )
+  const canShowUploadedData = Boolean(activeUploadedReport)
+  const effectiveShowUploadedData = showUploadedData && canShowUploadedData
 
-  const summaries = activeUploadedReport?.summaries ?? remoteSummaries
-  const summariesError = activeUploadedReport ? null : remoteSummariesError
+  const summaries =
+    showGlobalData || !canShowUploadedData
+      ? remoteSummaries
+      : activeUploadedReport?.summaries ?? []
+  const summariesError = showGlobalData ? remoteSummariesError : null
 
   const updateSelectedMetrics = (nextMetrics: MetricId[]) => {
     setSelectedMetricsByModality((current) => ({
@@ -287,25 +294,57 @@ function App() {
     updateSelectedMetrics([...selectedMetrics, metric])
   }
 
-  const handleUpload = async (files: File[]) => {
+  const handleFilesSelected = async (files: File[]) => {
+    const nextDrafts = await buildUploadDrafts(files)
+    setPendingUploads((current) => {
+      const pendingByModality = new Map(
+        current
+          .filter((draft) => draft.selectedModality !== null)
+          .map((draft) => [draft.selectedModality as ModalityId, draft])
+      )
+
+      for (const draft of nextDrafts) {
+        if (draft.selectedModality) {
+          pendingByModality.set(draft.selectedModality, draft)
+        }
+      }
+
+      const unresolvedDrafts = [
+        ...current.filter((draft) => draft.selectedModality === null),
+        ...nextDrafts.filter((draft) => draft.selectedModality === null),
+      ]
+
+      return [...pendingByModality.values(), ...unresolvedDrafts]
+    })
+    setUploadError(null)
+  }
+
+  const handleLoadDrafts = async () => {
     if (catalogState.status !== "ready") {
       return
     }
 
-    const nextReports = await parseUploadedReports(files, catalogState.catalog)
-    setUploadedReports(nextReports)
+    const nextReports = await finalizeUploadedReports(pendingUploads, catalogState.catalog)
+    setUploadedReports((current) => ({
+      modalities: {
+        ...(current?.modalities ?? {}),
+        ...nextReports.modalities,
+      },
+    }))
+    setPendingUploads([])
     setUploadError(null)
     setSelectedModality((current) => {
       const modalities = Object.keys(nextReports.modalities) as ModalityId[]
       return modalities.includes(current) ? current : modalities[0]
     })
     setSelectedView("raw")
-    setSelectionNotice("Loaded uploaded MRIQC CSV data in raw-row mode.")
+    setSelectionNotice("Loaded reviewed MRIQC CSV data in raw-row mode.")
+    setShowUploadedData(true)
   }
 
-  const handleUploadAttempt = async (files: File[]) => {
+  const handleFilesSelectedAttempt = async (files: File[]) => {
     try {
-      await handleUpload(files)
+      await handleFilesSelected(files)
     } catch (error) {
       setUploadError(
         error instanceof Error ? error.message : "Unexpected error while reading CSV files."
@@ -313,9 +352,47 @@ function App() {
     }
   }
 
-  const handleClearUpload = () => {
+  const handleLoadDraftsAttempt = async () => {
+    try {
+      await handleLoadDrafts()
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Unexpected error while loading reviewed files."
+      )
+    }
+  }
+
+  const handleDraftModalityChange = (draftId: string, modality: ModalityId | null) => {
+    setPendingUploads((current) =>
+      current.map((draft) =>
+        draft.id === draftId ? { ...draft, selectedModality: modality } : draft
+      )
+    )
+  }
+
+  const handleDismissDraft = (draftId: string) => {
+    setPendingUploads((current) => current.filter((draft) => draft.id !== draftId))
+  }
+
+  const handleClearUploadedModality = (modality: ModalityId) => {
+    setUploadedReports((current) => {
+      if (!current) {
+        return current
+      }
+
+      const nextModalities = { ...current.modalities }
+      delete nextModalities[modality]
+
+      return Object.keys(nextModalities).length > 0 ? { modalities: nextModalities } : null
+    })
+    setSelectionNotice(`Removed uploaded ${modality} dataset.`)
+  }
+
+  const handleClearAllUploaded = () => {
     setUploadedReports(null)
+    setPendingUploads([])
     setUploadError(null)
+    setShowUploadedData(false)
     setSelectionNotice("Returned to API-backed dataset.")
   }
 
@@ -406,6 +483,76 @@ function App() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button type="button" variant="outline" className="rounded-xl">
+                      Your data
+                      {uploadedModalityCount > 0 ? `${uploadedModalityCount} loaded` : "none"}
+                      {pendingUploads.length > 0 ? ` · ${pendingUploads.length} pending` : ""}
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-full sm:max-w-xl">
+                    <SheetHeader className="border-b border-border/70 pb-4">
+                      <SheetTitle>Your Data</SheetTitle>
+                      <SheetDescription>
+                        Upload MRIQC CSV files by modality and prepare them for later
+                        comparison against the global MRIQC reference.
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <ReportUploadPanel
+                        disabled={catalogState.status !== "ready"}
+                        uploadedReports={uploadedReports}
+                        pendingFiles={pendingUploads}
+                        onFilesSelected={handleFilesSelectedAttempt}
+                        onDraftModalityChange={handleDraftModalityChange}
+                        onLoadDrafts={handleLoadDraftsAttempt}
+                        onDismissDraft={handleDismissDraft}
+                        onClearUploadedModality={handleClearUploadedModality}
+                        onClearAllUploaded={handleClearAllUploaded}
+                      />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                {uploadedModalityCount > 0 ? (
+                  <span className="rounded-full border border-emerald-300/70 bg-emerald-100/80 px-3 py-1 text-xs font-medium text-emerald-900">
+                    {uploadedModalityCount} uploaded modalit{uploadedModalityCount === 1 ? "y" : "ies"}
+                  </span>
+                ) : null}
+                <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/75 p-1">
+                  <button
+                    type="button"
+                    className={
+                      showGlobalData
+                        ? "rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-900"
+                        : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground"
+                    }
+                    onClick={() => setShowGlobalData((current) => !current)}
+                  >
+                    Global
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      effectiveShowUploadedData
+                        ? "rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-900"
+                        : "rounded-full px-3 py-1 text-xs font-medium text-muted-foreground"
+                    }
+                    onClick={() =>
+                      canShowUploadedData
+                        ? setShowUploadedData((current) => !current)
+                        : undefined
+                    }
+                    disabled={!canShowUploadedData}
+                  >
+                    Yours
+                  </button>
+                </div>
+                {pendingUploads.length > 0 ? (
+                  <span className="rounded-full border border-amber-300/70 bg-amber-100/80 px-3 py-1 text-xs font-medium text-amber-900">
+                    {pendingUploads.length} file{pendingUploads.length === 1 ? "" : "s"} pending review
+                  </span>
+                ) : null}
                 {selectionNotice ? (
                   <span className="rounded-full border border-amber-300/70 bg-amber-100/80 px-3 py-1 text-xs font-medium text-amber-900">
                     {selectionNotice}
@@ -414,17 +561,11 @@ function App() {
                 <ViewSwitcher
                   selectedView={selectedView}
                   onSelectView={(view) =>
-                    setSelectedView(activeUploadedReport ? "raw" : view)
+                    setSelectedView(activeUploadedReport && effectiveShowUploadedData ? "raw" : view)
                   }
                 />
               </div>
             </div>
-            <ReportUploadPanel
-              disabled={catalogState.status !== "ready"}
-              fileNames={uploadedFileNames}
-              onFilesSelected={handleUploadAttempt}
-              onClear={handleClearUpload}
-            />
             {activeUploadedReport ? (
               <div className="flex flex-wrap items-center gap-3 rounded-[1.4rem] border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-950">
                 <span className="font-medium">
@@ -446,7 +587,9 @@ function App() {
                     metricLabel={descriptor.label}
                     metricDescription={describeMetric(descriptor)}
                     selectedView={selectedView}
-                    distributionOverride={activeDistributions[descriptor.field] ?? null}
+                    uploadedDistribution={activeDistributions[descriptor.field] ?? null}
+                    showGlobal={showGlobalData}
+                    showUploaded={effectiveShowUploadedData}
                     onRemove={() => toggleSelectedMetric(descriptor.field)}
                     compact={selectedMetricDescriptors.length > 1}
                   />

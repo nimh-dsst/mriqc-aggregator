@@ -7,6 +7,15 @@ import type {
 
 type UploadedRow = Record<string, string>
 
+export type UploadedFileDraft = {
+  id: string
+  file: File
+  fileName: string
+  rowCount: number
+  detectedModality: ModalityId | null
+  selectedModality: ModalityId | null
+}
+
 export type UploadedModalityReport = {
   modality: ModalityId
   fileName: string
@@ -17,6 +26,13 @@ export type UploadedModalityReport = {
 
 export type UploadedReportBundle = {
   modalities: Partial<Record<ModalityId, UploadedModalityReport>>
+}
+
+type ParsedFile = {
+  file: File
+  fileName: string
+  rows: UploadedRow[]
+  headers: string[]
 }
 
 const BOLD_HINT_FIELDS = new Set([
@@ -219,62 +235,110 @@ function buildDistribution(
   }
 }
 
-export async function parseUploadedReports(
-  files: File[],
-  catalog: MetricCatalog
-): Promise<UploadedReportBundle> {
-  const modalities: Partial<Record<ModalityId, UploadedModalityReport>> = {}
-
-  for (const file of files) {
-    const text = await file.text()
-    const rows = parseCsv(text)
-    if (rows.length === 0) {
-      throw new Error(`"${file.name}" is empty or could not be parsed as CSV.`)
-    }
-
-    const headers = Object.keys(rows[0])
-    const modality = inferModality(file.name, headers)
-    if (!modality) {
-      throw new Error(
-        `Couldn't infer modality for "${file.name}". Include T1w, T2w, or bold in the filename.`
-      )
-    }
-
-    const metricFields = new Set(
-      (catalog.find((entry) => entry.name === modality)?.metrics ?? []).map(
-        (metric) => metric.field
-      )
-    )
-
-    const distributions = Object.fromEntries(
-      [...metricFields].map((field) => {
-        const values = rows
-          .map((row) => toNumber(row[field]))
-          .filter((value): value is number => value !== null)
-
-        return [field, buildDistribution(field, values, rows.length)]
-      })
-    )
-
-    modalities[modality] = {
-      modality,
-      fileName: file.name,
-      rowCount: rows.length,
-      summaries: Object.values(distributions).map((distribution) => ({
-        field: distribution.field,
-        value_count: distribution.value_count,
-        missing_count: distribution.missing_count,
-        missing_fraction: distribution.missing_fraction,
-        min: distribution.min,
-        max: distribution.max,
-        mean: distribution.mean,
-      })),
-      distributions,
-    }
+async function parseFile(file: File): Promise<ParsedFile> {
+  const rows = parseCsv(await file.text())
+  if (rows.length === 0) {
+    throw new Error(`"${file.name}" is empty or could not be parsed as CSV.`)
   }
 
-  if (Object.keys(modalities).length === 0) {
+  const headers = Object.keys(rows[0])
+  return {
+    file,
+    fileName: file.name,
+    rows,
+    headers,
+  }
+}
+
+function buildModalityReport(
+  parsedFile: ParsedFile,
+  modality: ModalityId,
+  catalog: MetricCatalog
+): UploadedModalityReport {
+  const metricFields = new Set(
+    (catalog.find((entry) => entry.name === modality)?.metrics ?? []).map(
+      (metric) => metric.field
+    )
+  )
+
+  const distributions = Object.fromEntries(
+    [...metricFields].map((field) => {
+      const values = parsedFile.rows
+        .map((row) => toNumber(row[field]))
+        .filter((value): value is number => value !== null)
+
+      return [field, buildDistribution(field, values, parsedFile.rows.length)]
+    })
+  )
+
+  return {
+    modality,
+    fileName: parsedFile.fileName,
+    rowCount: parsedFile.rows.length,
+    summaries: Object.values(distributions).map((distribution) => ({
+      field: distribution.field,
+      value_count: distribution.value_count,
+      missing_count: distribution.missing_count,
+      missing_fraction: distribution.missing_fraction,
+      min: distribution.min,
+      max: distribution.max,
+      mean: distribution.mean,
+    })),
+    distributions,
+  }
+}
+
+export async function buildUploadDrafts(files: File[]): Promise<UploadedFileDraft[]> {
+  const parsedFiles = await Promise.all(
+    files
+      .filter((file) => file.name.toLowerCase().endsWith(".csv"))
+      .map((file) => parseFile(file))
+  )
+
+  if (parsedFiles.length === 0) {
     throw new Error("No MRIQC CSV files were provided.")
+  }
+
+  return parsedFiles.map((parsedFile, index) => {
+    const detectedModality = inferModality(parsedFile.fileName, parsedFile.headers)
+    return {
+      id: `${parsedFile.fileName}-${index}`,
+      file: parsedFile.file,
+      fileName: parsedFile.fileName,
+      rowCount: parsedFile.rows.length,
+      detectedModality,
+      selectedModality: detectedModality,
+    }
+  })
+}
+
+export async function finalizeUploadedReports(
+  drafts: UploadedFileDraft[],
+  catalog: MetricCatalog
+): Promise<UploadedReportBundle> {
+  if (drafts.length === 0) {
+    throw new Error("Add at least one MRIQC CSV file before loading the dataset.")
+  }
+
+  const unresolvedDraft = drafts.find((draft) => draft.selectedModality === null)
+  if (unresolvedDraft) {
+    throw new Error(`Select a modality for "${unresolvedDraft.fileName}" before loading.`)
+  }
+
+  const parsedFiles = await Promise.all(
+    drafts.map(async (draft) => ({
+      draft,
+      parsedFile: await parseFile(draft.file),
+    }))
+  )
+
+  const modalities: Partial<Record<ModalityId, UploadedModalityReport>> = {}
+  for (const { draft, parsedFile } of parsedFiles) {
+    modalities[draft.selectedModality as ModalityId] = buildModalityReport(
+      parsedFile,
+      draft.selectedModality as ModalityId,
+      catalog
+    )
   }
 
   return { modalities }
