@@ -2,37 +2,14 @@ FROM python:3.12-slim
 
 ARG PIXI_VERSION=v0.67.0
 
-RUN python - <<PY
-import os
-import platform
-import stat
-import urllib.request
-
-arch_map = {
-    "x86_64": "x86_64-unknown-linux-musl",
-    "amd64": "x86_64-unknown-linux-musl",
-    "aarch64": "aarch64-unknown-linux-musl",
-    "arm64": "aarch64-unknown-linux-musl",
-}
-
-machine = platform.machine().lower()
-try:
-    target = arch_map[machine]
-except KeyError as exc:
-    raise SystemExit(f"Unsupported architecture for pixi: {machine}") from exc
-
-url = (
-    f"https://github.com/prefix-dev/pixi/releases/download/"
-    f"${PIXI_VERSION}/pixi-{target}"
-)
-path = "/usr/local/bin/pixi"
-with urllib.request.urlopen(url) as response, open(path, "wb") as destination:
-    destination.write(response.read())
-os.chmod(
-    path,
-    os.stat(path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
-)
-PY
+RUN arch="$(dpkg --print-architecture)" \
+    && case "$arch" in \
+        amd64) pixi_arch="x86_64-unknown-linux-musl" ;; \
+        arm64) pixi_arch="aarch64-unknown-linux-musl" ;; \
+        *) echo "Unsupported architecture for pixi: $arch" >&2; exit 1 ;; \
+    esac \
+    && python -c "import pathlib, urllib.request; pathlib.Path('/usr/local/bin/pixi').write_bytes(urllib.request.urlopen('https://github.com/prefix-dev/pixi/releases/download/${PIXI_VERSION}/pixi-${pixi_arch}').read())" \
+    && chmod +x /usr/local/bin/pixi
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
