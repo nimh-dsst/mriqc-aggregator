@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react"
 import { XIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { fetchMetricDistribution, type MetricDistribution } from "@/lib/api"
+import { fetchMetricDistribution } from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import type { MetricId, ModalityId, ViewId } from "@/types/ui"
+import type { MetricDistribution, MetricId, ModalityId, ViewId } from "@/types/ui"
 
 type LoadState =
   | { status: "loading" }
@@ -30,6 +30,7 @@ export function MetricHistogramCard({
   selectedView,
   onRemove,
   compact = false,
+  distributionOverride,
 }: {
   modality: ModalityId
   metric: MetricId
@@ -38,10 +39,18 @@ export function MetricHistogramCard({
   selectedView: ViewId
   onRemove?: () => void
   compact?: boolean
+  distributionOverride?: MetricDistribution | null
 }) {
   const [state, setState] = useState<LoadState>({ status: "loading" })
+  const resolvedState: LoadState = distributionOverride
+    ? { status: "ready", distribution: distributionOverride }
+    : state
 
   useEffect(() => {
+    if (distributionOverride) {
+      return
+    }
+
     let cancelled = false
 
     void fetchMetricDistribution(modality, metric, selectedView).then(
@@ -66,9 +75,9 @@ export function MetricHistogramCard({
     return () => {
       cancelled = true
     }
-  }, [metric, modality, selectedView])
+  }, [distributionOverride, metric, modality, selectedView])
 
-  if (state.status === "loading") {
+  if (resolvedState.status === "loading") {
     return (
       <section className="rounded-3xl border border-border/70 bg-card/90 p-6 shadow-sm">
         <p className="text-sm text-muted-foreground">Loading metric distribution…</p>
@@ -76,18 +85,18 @@ export function MetricHistogramCard({
     )
   }
 
-  if (state.status === "error") {
+  if (resolvedState.status === "error") {
     return (
       <section className="rounded-3xl border border-destructive/30 bg-destructive/5 p-6 shadow-sm">
         <p className="text-sm font-medium text-destructive">
           Failed to load histogram data.
         </p>
-        <p className="mt-2 text-sm text-muted-foreground">{state.message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{resolvedState.message}</p>
       </section>
     )
   }
 
-  const { distribution } = state
+  const { distribution } = resolvedState
   const histogramTotal = distribution.value_count || 1
   const chartData = distribution.histogram.map((bucket, index) => ({
     ...bucket,
