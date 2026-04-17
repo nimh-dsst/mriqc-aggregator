@@ -4,7 +4,7 @@ set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 DATA_VOLUME_ID="${data_volume_id}"
-DATA_DEVICE_SERIAL="vol$(echo "$DATA_VOLUME_ID" | tr -d '-')"
+DATA_DEVICE_SERIAL="$(echo "$DATA_VOLUME_ID" | tr -d '-')"
 REPO_DIR=/opt/mriqc-aggregator
 REPO_URL="${repo_url}"
 REPO_REF="${repo_ref}"

@@ -24,8 +24,12 @@ locals {
     var.tags,
   )
 
-  selected_vpc_id     = var.vpc_id != null ? var.vpc_id : data.aws_vpc.default[0].id
-  selected_subnet_id  = var.public_subnet_id != null ? var.public_subnet_id : sort(data.aws_subnets.public[0].ids)[0]
+  selected_vpc_id = var.vpc_id != null ? var.vpc_id : data.aws_vpc.default[0].id
+  compatible_public_subnet_ids = var.public_subnet_id != null ? [] : sort([
+    for subnet_id, subnet in data.aws_subnet.public :
+    subnet_id if contains(data.aws_ec2_instance_type_offerings.available[0].locations, subnet.availability_zone)
+  ])
+  selected_subnet_id  = var.public_subnet_id != null ? var.public_subnet_id : local.compatible_public_subnet_ids[0]
   data_device_name    = "/dev/sdf"
   web_ports           = [80, 443]
   allowed_cidr_blocks = toset(var.allowed_ingress_cidr_blocks)
@@ -53,6 +57,22 @@ data "aws_subnets" "public" {
   filter {
     name   = "map-public-ip-on-launch"
     values = ["true"]
+  }
+}
+
+data "aws_subnet" "public" {
+  for_each = var.public_subnet_id == null ? toset(data.aws_subnets.public[0].ids) : toset([])
+
+  id = each.value
+}
+
+data "aws_ec2_instance_type_offerings" "available" {
+  count         = var.public_subnet_id == null ? 1 : 0
+  location_type = "availability-zone"
+
+  filter {
+    name   = "instance-type"
+    values = [var.instance_type]
   }
 }
 
