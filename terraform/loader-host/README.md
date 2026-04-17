@@ -32,7 +32,7 @@ The production stack is:
 - Region: `us-east-1`
 - VPC: the account default VPC unless you override it
 - Public subnet: the first public subnet in that VPC unless you override it
-- Instance type: `t3.xlarge`
+- Instance type: `t3.large`
 - Root volume: `64 GiB`
 - Data volume: `300 GiB`
 - Repo URL: `https://github.com/nimh-dsst/mriqc-aggregator.git`
