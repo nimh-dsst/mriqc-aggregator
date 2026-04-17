@@ -14,7 +14,15 @@ EOF
 )
 
 apt-get update
-apt-get install -y ca-certificates curl git gnupg jq openssl unzip awscli
+apt-get install -y ca-certificates curl git gnupg jq locales openssl unzip awscli
+
+if grep -q '^# *en_US.UTF-8 UTF-8' /etc/locale.gen; then
+  sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+elif ! grep -q '^en_US.UTF-8 UTF-8' /etc/locale.gen; then
+  echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen
+fi
+locale-gen en_US.UTF-8
+update-locale LANG=en_US.UTF-8
 
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
