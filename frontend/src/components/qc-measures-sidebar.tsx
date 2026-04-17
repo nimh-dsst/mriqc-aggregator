@@ -86,12 +86,12 @@ export function AppSidebar({
         />
         <SearchForm query={query} onQueryChange={onQueryChange} />
       </SidebarHeader>
-      <div className="px-3 pb-2 text-[11px] uppercase tracking-[0.18em] text-sidebar-foreground/55">
-        {selectedMetrics.length} selected
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 pb-2 text-[11px] uppercase tracking-[0.16em] text-sidebar-foreground/55">
+        <span className="min-w-0">{selectedMetrics.length} selected</span>
         {selectedMetrics.length > 0 ? (
           <button
             type="button"
-            className="ml-2 text-sidebar-primary hover:underline"
+            className="shrink-0 text-sidebar-primary hover:underline"
             onClick={onClearSelection}
           >
             Clear

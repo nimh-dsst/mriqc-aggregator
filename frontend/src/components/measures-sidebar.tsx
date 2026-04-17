@@ -94,7 +94,7 @@ export function MeasuresSidebar({
           <Button
             variant="ghost"
             size="xs"
-            className="h-7 w-full justify-start rounded-xl border border-sidebar-border/70 bg-[linear-gradient(135deg,color-mix(in_oklab,var(--color-sidebar-accent)_68%,white),color-mix(in_oklab,var(--color-sidebar)_82%,white))] px-3 text-[11px] uppercase tracking-[0.18em] text-sidebar-foreground/75 shadow-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="h-7 w-full justify-center rounded-xl border border-sidebar-border/70 bg-[linear-gradient(135deg,color-mix(in_oklab,var(--color-sidebar-accent)_68%,white),color-mix(in_oklab,var(--color-sidebar)_82%,white))] px-3 text-center text-[11px] uppercase tracking-[0.18em] text-sidebar-foreground/75 shadow-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={() => {
               setOpenItems((current) => {
                 const next = { ...current }
@@ -110,7 +110,7 @@ export function MeasuresSidebar({
           <Button
             variant="ghost"
             size="xs"
-            className="h-7 w-full justify-start rounded-xl border border-sidebar-border/70 bg-[linear-gradient(135deg,color-mix(in_oklab,var(--color-sidebar)_78%,white),color-mix(in_oklab,var(--color-sidebar-accent)_48%,white))] px-3 text-[11px] uppercase tracking-[0.18em] text-sidebar-foreground/75 shadow-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="h-7 w-full justify-center rounded-xl border border-sidebar-border/70 bg-[linear-gradient(135deg,color-mix(in_oklab,var(--color-sidebar)_78%,white),color-mix(in_oklab,var(--color-sidebar-accent)_48%,white))] px-3 text-center text-[11px] uppercase tracking-[0.18em] text-sidebar-foreground/75 shadow-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={onSelectAll}
           >
             Select all
