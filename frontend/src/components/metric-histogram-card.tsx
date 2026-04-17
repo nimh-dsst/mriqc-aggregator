@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react"
 import { XIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { fetchMetricDistribution, type MetricDistribution } from "@/lib/api"
+import { fetchMetricDistribution } from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import type { MetricId, ModalityId, ViewId } from "@/types/ui"
+import type { MetricDistribution, MetricId, ModalityId, ViewId } from "@/types/ui"
 
 type LoadState =
   | { status: "loading" }
@@ -22,6 +22,52 @@ function formatBucketLabel(start: number, end: number) {
   return `${start.toFixed(2)}-${end.toFixed(2)}`
 }
 
+function buildBucketEdges(min: number, max: number, bucketCount: number) {
+  const safeCount = Math.max(1, bucketCount)
+  if (min === max) {
+    return Array.from({ length: safeCount + 1 }, (_, index) => min + index)
+  }
+
+  const width = (max - min) / safeCount
+  return Array.from({ length: safeCount + 1 }, (_, index) =>
+    index === safeCount ? max : min + width * index
+  )
+}
+
+function rebinHistogram(distribution: MetricDistribution, edges: number[]) {
+  const totalCount = distribution.value_count || 1
+  const rebinned = new Array(Math.max(0, edges.length - 1)).fill(0)
+
+  for (const bucket of distribution.histogram) {
+    const bucketWidth = bucket.end - bucket.start
+    if (bucket.count === 0) {
+      continue
+    }
+
+    if (bucketWidth === 0) {
+      const index = rebinned.findIndex(
+        (_, edgeIndex) =>
+          bucket.start >= edges[edgeIndex] && bucket.start <= edges[edgeIndex + 1]
+      )
+      if (index >= 0) {
+        rebinned[index] += bucket.count
+      }
+      continue
+    }
+
+    for (let index = 0; index < rebinned.length; index += 1) {
+      const overlapStart = Math.max(bucket.start, edges[index])
+      const overlapEnd = Math.min(bucket.end, edges[index + 1])
+      const overlapWidth = overlapEnd - overlapStart
+      if (overlapWidth > 0) {
+        rebinned[index] += bucket.count * (overlapWidth / bucketWidth)
+      }
+    }
+  }
+
+  return rebinned.map((count) => count / totalCount)
+}
+
 export function MetricHistogramCard({
   modality,
   metric,
@@ -30,6 +76,9 @@ export function MetricHistogramCard({
   selectedView,
   onRemove,
   compact = false,
+  uploadedDistribution,
+  showGlobal = true,
+  showUploaded = false,
 }: {
   modality: ModalityId
   metric: MetricId
@@ -38,10 +87,17 @@ export function MetricHistogramCard({
   selectedView: ViewId
   onRemove?: () => void
   compact?: boolean
+  uploadedDistribution?: MetricDistribution | null
+  showGlobal?: boolean
+  showUploaded?: boolean
 }) {
   const [state, setState] = useState<LoadState>({ status: "loading" })
 
   useEffect(() => {
+    if (!showGlobal) {
+      return
+    }
+
     let cancelled = false
 
     void fetchMetricDistribution(modality, metric, selectedView).then(
@@ -66,9 +122,9 @@ export function MetricHistogramCard({
     return () => {
       cancelled = true
     }
-  }, [metric, modality, selectedView])
+  }, [metric, modality, selectedView, showGlobal])
 
-  if (state.status === "loading") {
+  if (showGlobal && state.status === "loading") {
     return (
       <section className="rounded-3xl border border-border/70 bg-card/90 p-6 shadow-sm">
         <p className="text-sm text-muted-foreground">Loading metric distribution…</p>
@@ -76,7 +132,7 @@ export function MetricHistogramCard({
     )
   }
 
-  if (state.status === "error") {
+  if (showGlobal && state.status === "error") {
     return (
       <section className="rounded-3xl border border-destructive/30 bg-destructive/5 p-6 shadow-sm">
         <p className="text-sm font-medium text-destructive">
@@ -87,28 +143,65 @@ export function MetricHistogramCard({
     )
   }
 
-  const { distribution } = state
-  const histogramTotal = distribution.value_count || 1
-  const chartData = distribution.histogram.map((bucket, index) => ({
-    ...bucket,
-    label: formatBucketLabel(bucket.start, bucket.end),
-    probability: bucket.count / histogramTotal,
-    fill:
-      index % 2 === 0 ? "var(--color-chart-1)" : "var(--color-chart-2)",
-  }))
-  const showCountLabels = chartData.length <= 12
+  const globalDistribution = showGlobal && state.status === "ready" ? state.distribution : null
+  const visibleUploadedDistribution = showUploaded ? uploadedDistribution ?? null : null
+  const visibleDistributions = [
+    globalDistribution,
+    visibleUploadedDistribution,
+  ].filter((distribution): distribution is MetricDistribution => distribution !== null)
 
-  if (distribution.value_count === 0) {
+  if (visibleDistributions.length === 0) {
     return (
       <section className="rounded-3xl border border-dashed border-border/70 bg-card/90 p-6 shadow-sm">
-        <p className="text-sm font-medium text-foreground">No values available for this metric.</p>
+        <p className="text-sm font-medium text-foreground">No data source is currently visible.</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Try a different modality or view, or confirm the database has loaded rows for
-          `{metric}`.
+          Turn on Global or Your data to render this metric.
         </p>
       </section>
     )
   }
+
+  const distribution =
+    visibleUploadedDistribution && !globalDistribution
+      ? visibleUploadedDistribution
+      : globalDistribution ?? visibleUploadedDistribution
+
+  if (!distribution) {
+    return null
+  }
+
+  if (visibleDistributions.every((entry) => entry.value_count === 0)) {
+    return (
+      <section className="rounded-3xl border border-dashed border-border/70 bg-card/90 p-6 shadow-sm">
+        <p className="text-sm font-medium text-foreground">No values available for this metric.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Try a different modality or source selection, or confirm the chosen dataset has
+          rows for `{metric}`.
+        </p>
+      </section>
+    )
+  }
+
+  const minValue = Math.min(...visibleDistributions.map((entry) => entry.min ?? Infinity))
+  const maxValue = Math.max(...visibleDistributions.map((entry) => entry.max ?? -Infinity))
+  const bucketCount = Math.max(
+    ...visibleDistributions.map((entry) => entry.histogram.length || 1)
+  )
+  const edges = buildBucketEdges(minValue, maxValue, bucketCount)
+  const globalProbabilities = globalDistribution
+    ? rebinHistogram(globalDistribution, edges)
+    : new Array(bucketCount).fill(0)
+  const uploadedProbabilities = visibleUploadedDistribution
+    ? rebinHistogram(visibleUploadedDistribution, edges)
+    : new Array(bucketCount).fill(0)
+  const chartData = edges.slice(0, -1).map((start, index) => ({
+    label: formatBucketLabel(start, edges[index + 1]),
+    globalProbability: globalProbabilities[index] ?? 0,
+    uploadedProbability: uploadedProbabilities[index] ?? 0,
+    globalCount: globalDistribution?.histogram[index]?.count ?? 0,
+    uploadedCount: visibleUploadedDistribution?.histogram[index]?.count ?? 0,
+  }))
+  const showCountLabels = chartData.length <= 12 && visibleDistributions.length === 1
 
   return (
     <section
@@ -146,12 +239,26 @@ export function MetricHistogramCard({
             </p>
           </div>
           <div className={compact ? "flex items-start pr-8" : "flex flex-col items-end gap-3 pr-10"}>
-            <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-3 text-right shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                Samples
-              </p>
-              <p className="mt-1 text-2xl font-semibold">{distribution.value_count}</p>
-            </div>
+            {visibleDistributions.length === 2 ? (
+              <div className="flex flex-wrap justify-end gap-2 pr-1 text-[11px]">
+                {globalDistribution ? (
+                  <span className="rounded-full border border-sky-300/70 bg-sky-100/80 px-2.5 py-1 font-medium text-sky-900">
+                    Global · {globalDistribution.value_count}
+                  </span>
+                ) : null}
+                {visibleUploadedDistribution ? (
+                  <span className="rounded-full border border-emerald-300/70 bg-emerald-100/80 px-2.5 py-1 font-medium text-emerald-900">
+                    Yours · {visibleUploadedDistribution.value_count}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <div className="pr-1 text-[11px]">
+                <span className="rounded-full border border-border/70 bg-background/75 px-2.5 py-1 font-medium text-foreground">
+                  Samples · {distribution.value_count}
+                </span>
+              </div>
+            )}
           </div>
         </div>
         <div className={compact ? "mt-3 h-[220px] w-full rounded-[1.1rem] border border-border/60 bg-background/55 p-2.5" : "mt-6 h-[320px] w-full rounded-[1.4rem] border border-border/60 bg-background/55 p-3"}>
@@ -184,19 +291,42 @@ export function MetricHistogramCard({
                   background: "rgba(252,249,244,0.98)",
                   boxShadow: "0 16px 32px -24px rgba(39, 72, 58, 0.55)",
                 }}
-                formatter={(value) => [
-                  `${(((value as number | undefined) ?? 0) * 100).toFixed(1)}%`,
-                  "Probability",
-                ]}
+                formatter={(value, name) => {
+                  const label = name === "uploadedProbability" ? "Yours" : "Global"
+                  return [
+                    `${(((value as number | undefined) ?? 0) * 100).toFixed(1)}%`,
+                    label,
+                  ]
+                }}
               />
-              <Bar dataKey="probability" radius={[10, 10, 0, 0]}>
-                {chartData.map((entry, index) => (
-                  <Cell key={`${entry.label}-${index}`} fill={entry.fill} />
-                ))}
-                {showCountLabels ? (
-                  <LabelList dataKey="count" position="top" className="fill-muted-foreground text-[11px]" />
-                ) : null}
-              </Bar>
+              {globalDistribution ? (
+                <Bar dataKey="globalProbability" radius={[10, 10, 0, 0]} fill="var(--color-chart-2)">
+                  {chartData.map((entry, index) => (
+                    <Cell
+                      key={`global-${entry.label}-${index}`}
+                      fill="var(--color-chart-2)"
+                      fillOpacity={visibleUploadedDistribution ? 0.62 : 1}
+                    />
+                  ))}
+                  {showCountLabels ? (
+                    <LabelList dataKey="globalCount" position="top" className="fill-muted-foreground text-[11px]" />
+                  ) : null}
+                </Bar>
+              ) : null}
+              {visibleUploadedDistribution ? (
+                <Bar dataKey="uploadedProbability" radius={[10, 10, 0, 0]} fill="var(--color-chart-1)">
+                  {chartData.map((entry, index) => (
+                    <Cell
+                      key={`uploaded-${entry.label}-${index}`}
+                      fill="var(--color-chart-1)"
+                      fillOpacity={globalDistribution ? 0.78 : 1}
+                    />
+                  ))}
+                  {showCountLabels ? (
+                    <LabelList dataKey="uploadedCount" position="top" className="fill-muted-foreground text-[11px]" />
+                  ) : null}
+                </Bar>
+              ) : null}
             </BarChart>
           </ResponsiveContainer>
         </div>
