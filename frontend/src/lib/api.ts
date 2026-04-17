@@ -1,36 +1,11 @@
 import type {
   MetricCatalog,
+  MetricDistribution,
   MetricSummary,
   ViewId,
 } from "@/types/ui"
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "/api/v1"
-
-export type MetricHistogramBucket = {
-  start: number
-  end: number
-  count: number
-}
-
-export type MetricDistribution = {
-  field: string
-  row_count: number
-  value_count: number
-  missing_count: number
-  missing_fraction: number
-  min: number | null
-  max: number | null
-  mean: number | null
-  stddev: number | null
-  quantiles: {
-    p05: number | null
-    p25: number | null
-    p50: number | null
-    p75: number | null
-    p95: number | null
-  }
-  histogram: MetricHistogramBucket[]
-}
 
 type MetricDistributionResponse = {
   modality: string
