@@ -647,21 +647,11 @@ class DatabaseProfiler:
                 func.max(column).label("max"),
                 func.avg(column).label("mean"),
                 func.stddev_pop(column).label("stddev"),
-                func.percentile_cont(0.05)
-                .within_group(column)
-                .label("p05"),
-                func.percentile_cont(0.25)
-                .within_group(column)
-                .label("p25"),
-                func.percentile_cont(0.50)
-                .within_group(column)
-                .label("p50"),
-                func.percentile_cont(0.75)
-                .within_group(column)
-                .label("p75"),
-                func.percentile_cont(0.95)
-                .within_group(column)
-                .label("p95"),
+                func.percentile_cont(0.05).within_group(column).label("p05"),
+                func.percentile_cont(0.25).within_group(column).label("p25"),
+                func.percentile_cont(0.50).within_group(column).label("p50"),
+                func.percentile_cont(0.75).within_group(column).label("p75"),
+                func.percentile_cont(0.95).within_group(column).label("p95"),
             ).select_from(base)
         ).one()
         row_count = int(row._mapping["row_count"] or 0)
@@ -724,7 +714,11 @@ class DatabaseProfiler:
             histogram = []
             for index in range(bins):
                 start = min_value + (index * bin_width)
-                end = max_value if index == bins - 1 else min_value + ((index + 1) * bin_width)
+                end = (
+                    max_value
+                    if index == bins - 1
+                    else min_value + ((index + 1) * bin_width)
+                )
                 histogram.append(
                     {
                         "start": float(start),

@@ -120,22 +120,22 @@ def create_app(*, database_url: str | None = None) -> FastAPI:
             cache,
             ("modalities",),
             lambda: {
-            "modalities": [
-                {
-                    "name": modality,
-                    "distribution_fields": list(
-                        supported_distribution_fields(modality)
-                    ),
-                    "metric_fields": list(supported_metric_fields(modality)),
-                    "metrics": [
-                        descriptor.to_dict()
-                        for descriptor in metric_descriptors_for_modality(modality)
-                    ],
-                    "extra_fields": list(supported_extra_fields(modality)),
-                }
-                for modality in supported_modalities()
-            ]
-        },
+                "modalities": [
+                    {
+                        "name": modality,
+                        "distribution_fields": list(
+                            supported_distribution_fields(modality)
+                        ),
+                        "metric_fields": list(supported_metric_fields(modality)),
+                        "metrics": [
+                            descriptor.to_dict()
+                            for descriptor in metric_descriptors_for_modality(modality)
+                        ],
+                        "extra_fields": list(supported_extra_fields(modality)),
+                    }
+                    for modality in supported_modalities()
+                ]
+            },
         )
 
     @app.get("/api/v1/overview")

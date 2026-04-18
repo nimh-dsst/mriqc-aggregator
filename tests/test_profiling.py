@@ -414,7 +414,9 @@ def test_fastapi_profile_endpoint_returns_expected_payload(
         )
         assert cached_metric_summaries_response.status_code == 200
         assert cached_metric_summaries_response.headers["x-mriqc-cache"] == "HIT"
-        assert cached_metric_summaries_response.json() == metric_summaries_response.json()
+        assert (
+            cached_metric_summaries_response.json() == metric_summaries_response.json()
+        )
 
         metric_distribution_response = client.get(
             "/api/v1/modalities/T1w/metrics/cjv",

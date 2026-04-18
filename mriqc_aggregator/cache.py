@@ -61,7 +61,9 @@ class TimedCache(Generic[T]):
 
     def _purge_expired(self, now: float) -> None:
         expired_keys = [
-            key for key, (expires_at, _value) in self._entries.items() if expires_at <= now
+            key
+            for key, (expires_at, _value) in self._entries.items()
+            if expires_at <= now
         ]
         for key in expired_keys:
             self._entries.pop(key, None)

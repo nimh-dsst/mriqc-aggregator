@@ -27,6 +27,25 @@ That command will:
 
 See [docs/representative-sampling.md](docs/representative-sampling.md) for details.
 
+## Local Validation
+
+Install the local git hooks once per clone:
+
+```bash
+pixi run install-hooks
+```
+
+That enables:
+
+1. `pre-commit` hooks for Python formatting/linting plus frontend lint
+2. a `pre-push` hook for the Python test suite
+
+For an explicit local CI pass before pushing, run:
+
+```bash
+pixi run validate
+```
+
 ## Local Postgres
 
 ```bash
