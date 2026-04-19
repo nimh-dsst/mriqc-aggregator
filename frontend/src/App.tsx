@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, lazy, startTransition, useEffect, useMemo, useState } from "react"
 import { AppSidebar } from "@/components/qc-measures-sidebar"
-import { MetricHistogramCard } from "@/components/metric-histogram-card"
-import { ReportUploadPanel } from "@/components/report-upload-panel"
 import { ViewSwitcher } from "@/components/view-switcher"
 import {
   describeMetric,
@@ -12,12 +10,7 @@ import {
   fetchMetricSummaries,
   fetchModalities,
 } from "@/lib/api"
-import {
-  buildUploadDrafts,
-  finalizeUploadedReports,
-  type UploadedFileDraft,
-  type UploadedReportBundle,
-} from "@/lib/uploaded-report"
+import type { UploadedFileDraft, UploadedReportBundle } from "@/lib/uploaded-report"
 import { cn } from "@/lib/utils"
 import {
   Sheet,
@@ -41,6 +34,17 @@ import type {
   ModalityId,
   ViewId,
 } from "@/types/ui"
+
+const MetricHistogramCard = lazy(async () => ({
+  default: (await import("@/components/metric-histogram-card")).MetricHistogramCard,
+}))
+const ReportUploadPanel = lazy(async () => ({
+  default: (await import("@/components/report-upload-panel")).ReportUploadPanel,
+}))
+
+function loadUploadHelpers() {
+  return import("@/lib/uploaded-report")
+}
 
 type CatalogState =
   | { status: "loading" }
@@ -274,10 +278,12 @@ function App() {
   const summariesError = showGlobalData ? remoteSummariesError : null
 
   const updateSelectedMetrics = (nextMetrics: MetricId[]) => {
-    setSelectedMetricsByModality((current) => ({
-      ...current,
-      [activeModality]: nextMetrics.slice(0, MAX_SELECTED_METRICS),
-    }))
+    startTransition(() => {
+      setSelectedMetricsByModality((current) => ({
+        ...current,
+        [activeModality]: nextMetrics.slice(0, MAX_SELECTED_METRICS),
+      }))
+    })
   }
 
   const toggleSelectedMetric = (metric: MetricId) => {
@@ -296,28 +302,31 @@ function App() {
   }
 
   const handleFilesSelected = async (files: File[]) => {
+    const { buildUploadDrafts } = await loadUploadHelpers()
     const nextDrafts = await buildUploadDrafts(files)
-    setPendingUploads((current) => {
-      const pendingByModality = new Map(
-        current
-          .filter((draft) => draft.selectedModality !== null)
-          .map((draft) => [draft.selectedModality as ModalityId, draft])
-      )
+    startTransition(() => {
+      setPendingUploads((current) => {
+        const pendingByModality = new Map(
+          current
+            .filter((draft) => draft.selectedModality !== null)
+            .map((draft) => [draft.selectedModality as ModalityId, draft])
+        )
 
-      for (const draft of nextDrafts) {
-        if (draft.selectedModality) {
-          pendingByModality.set(draft.selectedModality, draft)
+        for (const draft of nextDrafts) {
+          if (draft.selectedModality) {
+            pendingByModality.set(draft.selectedModality, draft)
+          }
         }
-      }
 
-      const unresolvedDrafts = [
-        ...current.filter((draft) => draft.selectedModality === null),
-        ...nextDrafts.filter((draft) => draft.selectedModality === null),
-      ]
+        const unresolvedDrafts = [
+          ...current.filter((draft) => draft.selectedModality === null),
+          ...nextDrafts.filter((draft) => draft.selectedModality === null),
+        ]
 
-      return [...pendingByModality.values(), ...unresolvedDrafts]
+        return [...pendingByModality.values(), ...unresolvedDrafts]
+      })
+      setUploadError(null)
     })
-    setUploadError(null)
   }
 
   const handleLoadDrafts = async () => {
@@ -325,22 +334,25 @@ function App() {
       return
     }
 
+    const { finalizeUploadedReports } = await loadUploadHelpers()
     const nextReports = await finalizeUploadedReports(pendingUploads, catalogState.catalog)
-    setUploadedReports((current) => ({
-      modalities: {
-        ...(current?.modalities ?? {}),
-        ...nextReports.modalities,
-      },
-    }))
-    setPendingUploads([])
-    setUploadError(null)
-    setSelectedModality((current) => {
-      const modalities = Object.keys(nextReports.modalities) as ModalityId[]
-      return modalities.includes(current) ? current : modalities[0]
+    startTransition(() => {
+      setUploadedReports((current) => ({
+        modalities: {
+          ...(current?.modalities ?? {}),
+          ...nextReports.modalities,
+        },
+      }))
+      setPendingUploads([])
+      setUploadError(null)
+      setSelectedModality((current) => {
+        const modalities = Object.keys(nextReports.modalities) as ModalityId[]
+        return modalities.includes(current) ? current : modalities[0]
+      })
+      setSelectedView("raw")
+      setSelectionNotice("Loaded reviewed MRIQC CSV data in raw-row mode.")
+      setShowUploadedData(true)
     })
-    setSelectedView("raw")
-    setSelectionNotice("Loaded reviewed MRIQC CSV data in raw-row mode.")
-    setShowUploadedData(true)
   }
 
   const handleFilesSelectedAttempt = async (files: File[]) => {
@@ -376,25 +388,29 @@ function App() {
   }
 
   const handleClearUploadedModality = (modality: ModalityId) => {
-    setUploadedReports((current) => {
-      if (!current) {
-        return current
-      }
+    startTransition(() => {
+      setUploadedReports((current) => {
+        if (!current) {
+          return current
+        }
 
-      const nextModalities = { ...current.modalities }
-      delete nextModalities[modality]
+        const nextModalities = { ...current.modalities }
+        delete nextModalities[modality]
 
-      return Object.keys(nextModalities).length > 0 ? { modalities: nextModalities } : null
+        return Object.keys(nextModalities).length > 0 ? { modalities: nextModalities } : null
+      })
+      setSelectionNotice(`Removed uploaded ${modality} dataset.`)
     })
-    setSelectionNotice(`Removed uploaded ${modality} dataset.`)
   }
 
   const handleClearAllUploaded = () => {
-    setUploadedReports(null)
-    setPendingUploads([])
-    setUploadError(null)
-    setShowUploadedData(false)
-    setSelectionNotice("Returned to API-backed dataset.")
+    startTransition(() => {
+      setUploadedReports(null)
+      setPendingUploads([])
+      setUploadError(null)
+      setShowUploadedData(false)
+      setSelectionNotice("Returned to API-backed dataset.")
+    })
   }
 
   const handleSelectAllCurrentModality = () => {
@@ -412,6 +428,12 @@ function App() {
     } else {
       setSelectionNotice(null)
     }
+  }
+
+  const handleSelectModality = (modality: ModalityId) => {
+    startTransition(() => {
+      setSelectedModality(modality)
+    })
   }
 
   if (catalogState.status === "loading") {
@@ -448,7 +470,7 @@ function App() {
         selectedMetrics={selectedMetrics}
         summaries={summaries}
         query={query}
-        onSelectModality={setSelectedModality}
+        onSelectModality={handleSelectModality}
         onToggleMetric={toggleSelectedMetric}
         onSelectAllVisible={handleSelectAllCurrentModality}
         onClearSelection={() => updateSelectedMetrics([])}
@@ -503,17 +525,25 @@ function App() {
                           </SheetDescription>
                         </SheetHeader>
                         <div className="flex-1 overflow-y-auto p-4">
-                          <ReportUploadPanel
-                            disabled={catalogState.status !== "ready"}
-                            uploadedReports={uploadedReports}
-                            pendingFiles={pendingUploads}
-                            onFilesSelected={handleFilesSelectedAttempt}
-                            onDraftModalityChange={handleDraftModalityChange}
-                            onLoadDrafts={handleLoadDraftsAttempt}
-                            onDismissDraft={handleDismissDraft}
-                            onClearUploadedModality={handleClearUploadedModality}
-                            onClearAllUploaded={handleClearAllUploaded}
-                          />
+                          <Suspense
+                            fallback={
+                              <div className="rounded-[1rem] border border-border/60 bg-card/65 p-4 text-sm text-muted-foreground">
+                                Loading upload tools…
+                              </div>
+                            }
+                          >
+                            <ReportUploadPanel
+                              disabled={catalogState.status !== "ready"}
+                              uploadedReports={uploadedReports}
+                              pendingFiles={pendingUploads}
+                              onFilesSelected={handleFilesSelectedAttempt}
+                              onDraftModalityChange={handleDraftModalityChange}
+                              onLoadDrafts={handleLoadDraftsAttempt}
+                              onDismissDraft={handleDismissDraft}
+                              onClearUploadedModality={handleClearUploadedModality}
+                              onClearAllUploaded={handleClearAllUploaded}
+                            />
+                          </Suspense>
                         </div>
                       </SheetContent>
                     </Sheet>
@@ -616,23 +646,38 @@ function App() {
               </div>
             ) : null}
             {selectedMetricDescriptors.length ? (
-              <div className={cn("grid gap-5", getGridClassName(selectedMetricDescriptors.length))}>
-                {selectedMetricDescriptors.map((descriptor) => (
-                  <MetricHistogramCard
-                    key={`${activeModality}:${descriptor.field}:${effectiveView}`}
-                    modality={activeModality}
-                    metric={descriptor.field}
-                    metricLabel={descriptor.label}
-                    metricDescription={describeMetric(descriptor)}
-                    selectedView={effectiveView}
-                    uploadedDistribution={activeDistributions[descriptor.field] ?? null}
-                    showGlobal={showGlobalData}
-                    showUploaded={effectiveShowUploadedData}
-                    onRemove={() => toggleSelectedMetric(descriptor.field)}
-                    compact={selectedMetricDescriptors.length > 1}
-                  />
-                ))}
-              </div>
+              <Suspense
+                fallback={
+                  <div className={cn("grid gap-5", getGridClassName(selectedMetricDescriptors.length))}>
+                    {selectedMetricDescriptors.map((descriptor) => (
+                      <section
+                        key={`loading:${activeModality}:${descriptor.field}:${effectiveView}`}
+                        className="rounded-[1.6rem] border border-border/70 bg-card/80 p-6 text-sm text-muted-foreground shadow-sm"
+                      >
+                        Loading {descriptor.label}…
+                      </section>
+                    ))}
+                  </div>
+                }
+              >
+                <div className={cn("grid gap-5", getGridClassName(selectedMetricDescriptors.length))}>
+                  {selectedMetricDescriptors.map((descriptor) => (
+                    <MetricHistogramCard
+                      key={`${activeModality}:${descriptor.field}:${effectiveView}`}
+                      modality={activeModality}
+                      metric={descriptor.field}
+                      metricLabel={descriptor.label}
+                      metricDescription={describeMetric(descriptor)}
+                      selectedView={effectiveView}
+                      uploadedDistribution={activeDistributions[descriptor.field] ?? null}
+                      showGlobal={showGlobalData}
+                      showUploaded={effectiveShowUploadedData}
+                      onRemove={() => toggleSelectedMetric(descriptor.field)}
+                      compact={selectedMetricDescriptors.length > 1}
+                    />
+                  ))}
+                </div>
+              </Suspense>
             ) : (
               <section className="rounded-3xl border border-dashed border-border/70 bg-card/80 p-8 text-sm text-muted-foreground">
                 Select one or more QC metrics from the sidebar to build the comparison grid.

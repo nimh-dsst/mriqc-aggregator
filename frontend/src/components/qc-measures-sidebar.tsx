@@ -44,13 +44,15 @@ export function AppSidebar({
   onClearSelection: () => void
   onQueryChange: (query: string) => void
 }) {
+  const deferredQuery = React.useDeferredValue(query)
+
   const groups = React.useMemo<MeasureGroup[]>(() => {
     const modality = catalog.find((entry) => entry.name === selectedModality)
     if (!modality) {
       return []
     }
 
-    const filteredMetrics = fuzzyFilterMetrics(modality.metrics, query)
+    const filteredMetrics = fuzzyFilterMetrics(modality.metrics, deferredQuery)
     const summaryMap = getMetricSummaryMap(summaries)
 
     return groupMetricsByCategory(filteredMetrics).map((group) => ({
@@ -74,7 +76,14 @@ export function AppSidebar({
         }),
       })),
     }))
-  }, [catalog, onToggleMetric, query, selectedMetrics, selectedModality, summaries])
+  }, [
+    catalog,
+    deferredQuery,
+    onToggleMetric,
+    selectedMetrics,
+    selectedModality,
+    summaries,
+  ])
 
   return (
     <Sidebar {...props}>
@@ -101,7 +110,7 @@ export function AppSidebar({
       <MeasuresSidebar
         groups={groups}
         onSelectAll={onSelectAllVisible}
-        forceExpandAll={query.trim().length > 0}
+        forceExpandAll={deferredQuery.trim().length > 0}
       />
       <SidebarRail />
     </Sidebar>

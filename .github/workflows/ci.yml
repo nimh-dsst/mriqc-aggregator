@@ -27,10 +27,7 @@ jobs:
           cache: false
 
       - name: Run pre-commit checks
-        run: pixi exec pre-commit run --all-files --show-diff-on-failure
-
-      - name: Run tests
-        run: pixi run test
+        run: pixi run validate-python
 
   frontend-lint:
     name: Frontend Lint

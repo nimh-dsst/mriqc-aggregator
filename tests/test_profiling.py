@@ -403,10 +403,20 @@ def test_fastapi_profile_endpoint_returns_expected_payload(
             params={"view": "raw"},
         )
         assert metric_summaries_response.status_code == 200
+        assert metric_summaries_response.headers["x-mriqc-cache"] == "MISS"
         metric_summaries = {
             row["field"]: row for row in metric_summaries_response.json()["metrics"]
         }
         assert metric_summaries["cjv"]["mean"] == pytest.approx(0.4)
+        cached_metric_summaries_response = client.get(
+            "/api/v1/modalities/T1w/metrics",
+            params={"view": "raw"},
+        )
+        assert cached_metric_summaries_response.status_code == 200
+        assert cached_metric_summaries_response.headers["x-mriqc-cache"] == "HIT"
+        assert (
+            cached_metric_summaries_response.json() == metric_summaries_response.json()
+        )
 
         metric_distribution_response = client.get(
             "/api/v1/modalities/T1w/metrics/cjv",

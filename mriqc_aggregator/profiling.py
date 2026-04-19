@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from statistics import fmean, pstdev
 from typing import Any
 
 from sqlalchemy import Select, String, Text, case, func, or_, select
@@ -267,56 +266,10 @@ def _serialize_value(value: Any) -> Any:
     return value
 
 
-def _quantile(sorted_values: list[float], probability: float) -> float | None:
-    if not sorted_values:
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
         return None
-    if len(sorted_values) == 1:
-        return float(sorted_values[0])
-    position = (len(sorted_values) - 1) * probability
-    lower_index = int(position)
-    upper_index = min(lower_index + 1, len(sorted_values) - 1)
-    lower_value = sorted_values[lower_index]
-    upper_value = sorted_values[upper_index]
-    fraction = position - lower_index
-    return float(lower_value + ((upper_value - lower_value) * fraction))
-
-
-def _histogram(values: list[float], *, bins: int) -> list[dict[str, Any]]:
-    if not values:
-        return []
-    min_value = min(values)
-    max_value = max(values)
-    if min_value == max_value:
-        return [
-            {
-                "start": float(min_value),
-                "end": float(max_value),
-                "count": len(values),
-            }
-        ]
-
-    bin_width = (max_value - min_value) / bins
-    counts = [0 for _ in range(bins)]
-    for value in values:
-        if value == max_value:
-            index = bins - 1
-        else:
-            index = int((value - min_value) / bin_width)
-            index = max(0, min(index, bins - 1))
-        counts[index] += 1
-
-    histogram: list[dict[str, Any]] = []
-    for index, count in enumerate(counts):
-        start = min_value + (index * bin_width)
-        end = max_value if index == bins - 1 else min_value + ((index + 1) * bin_width)
-        histogram.append(
-            {
-                "start": float(start),
-                "end": float(end),
-                "count": count,
-            }
-        )
-    return histogram
+    return float(value)
 
 
 class DatabaseProfiler:
@@ -685,15 +638,28 @@ class DatabaseProfiler:
         *,
         bins: int,
     ) -> dict[str, Any]:
-        row_count = self._count_rows(session, base)
-        raw_values = session.execute(
-            select(base.c[field_name]).where(base.c[field_name].is_not(None))
-        ).scalars()
-        values = [float(value) for value in raw_values]
-        value_count = len(values)
+        column = base.c[field_name]
+        row = session.execute(
+            select(
+                func.count().label("row_count"),
+                func.count(column).label("value_count"),
+                func.min(column).label("min"),
+                func.max(column).label("max"),
+                func.avg(column).label("mean"),
+                func.stddev_pop(column).label("stddev"),
+                func.percentile_cont(0.05).within_group(column).label("p05"),
+                func.percentile_cont(0.25).within_group(column).label("p25"),
+                func.percentile_cont(0.50).within_group(column).label("p50"),
+                func.percentile_cont(0.75).within_group(column).label("p75"),
+                func.percentile_cont(0.95).within_group(column).label("p95"),
+            ).select_from(base)
+        ).one()
+        row_count = int(row._mapping["row_count"] or 0)
+        value_count = int(row._mapping["value_count"] or 0)
         missing_count = row_count - value_count
-        sorted_values = sorted(values)
-        if not values:
+        min_value = _float_or_none(row._mapping["min"])
+        max_value = _float_or_none(row._mapping["max"])
+        if value_count == 0:
             return {
                 "field": field_name,
                 "row_count": row_count,
@@ -715,6 +681,51 @@ class DatabaseProfiler:
                 },
                 "histogram": [],
             }
+        histogram: list[dict[str, Any]]
+        if min_value == max_value:
+            histogram = [
+                {
+                    "start": min_value,
+                    "end": max_value,
+                    "count": value_count,
+                }
+            ]
+        else:
+            assert min_value is not None
+            assert max_value is not None
+            bin_width = (max_value - min_value) / bins
+            bucket_index = case(
+                (column >= max_value, bins - 1),
+                else_=func.floor((column - min_value) / bin_width),
+            ).label("bucket_index")
+            bucket_rows = session.execute(
+                select(
+                    bucket_index,
+                    func.count().label("bucket_count"),
+                )
+                .select_from(base)
+                .where(column.is_not(None))
+                .group_by(bucket_index)
+                .order_by(bucket_index)
+            ).all()
+            bucket_counts = {
+                int(row.bucket_index): int(row.bucket_count) for row in bucket_rows
+            }
+            histogram = []
+            for index in range(bins):
+                start = min_value + (index * bin_width)
+                end = (
+                    max_value
+                    if index == bins - 1
+                    else min_value + ((index + 1) * bin_width)
+                )
+                histogram.append(
+                    {
+                        "start": float(start),
+                        "end": float(end),
+                        "count": bucket_counts.get(index, 0),
+                    }
+                )
         return {
             "field": field_name,
             "row_count": row_count,
@@ -723,18 +734,18 @@ class DatabaseProfiler:
             "missing_fraction": (
                 float(missing_count / row_count) if row_count else 0.0
             ),
-            "min": float(min(values)),
-            "max": float(max(values)),
-            "mean": float(fmean(values)),
-            "stddev": float(pstdev(values)) if len(values) > 1 else 0.0,
+            "min": min_value,
+            "max": max_value,
+            "mean": _float_or_none(row._mapping["mean"]),
+            "stddev": _float_or_none(row._mapping["stddev"]),
             "quantiles": {
-                "p05": _quantile(sorted_values, 0.05),
-                "p25": _quantile(sorted_values, 0.25),
-                "p50": _quantile(sorted_values, 0.50),
-                "p75": _quantile(sorted_values, 0.75),
-                "p95": _quantile(sorted_values, 0.95),
+                "p05": _float_or_none(row._mapping["p05"]),
+                "p25": _float_or_none(row._mapping["p25"]),
+                "p50": _float_or_none(row._mapping["p50"]),
+                "p75": _float_or_none(row._mapping["p75"]),
+                "p95": _float_or_none(row._mapping["p95"]),
             },
-            "histogram": _histogram(values, bins=bins),
+            "histogram": histogram,
         }
 
     def _distribution(
