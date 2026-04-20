@@ -203,7 +203,15 @@ function buildDistribution(
       max: null,
       mean: null,
       stddev: null,
-      quantiles: { p05: null, p25: null, p50: null, p75: null, p95: null },
+      quantiles: {
+        p01: null,
+        p05: null,
+        p25: null,
+        p50: null,
+        p75: null,
+        p95: null,
+        p99: null,
+      },
       histogram: [],
     }
   }
@@ -225,11 +233,13 @@ function buildDistribution(
     mean,
     stddev: Math.sqrt(variance),
     quantiles: {
+      p01: quantile(sortedValues, 0.01),
       p05: quantile(sortedValues, 0.05),
       p25: quantile(sortedValues, 0.25),
       p50: quantile(sortedValues, 0.5),
       p75: quantile(sortedValues, 0.75),
       p95: quantile(sortedValues, 0.95),
+      p99: quantile(sortedValues, 0.99),
     },
     histogram: buildHistogram(sortedValues),
   }

@@ -1,4 +1,4 @@
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 from mriqc_aggregator.database import create_database_engine, create_database_schema
 
@@ -36,3 +36,32 @@ def test_create_database_schema_creates_expected_indexes(
     assert "ix_t1w_source_created_at" in t1w_indexes
     assert "ix_t1w_manufacturer" in t1w_indexes
     engine.dispose()
+
+
+def test_create_database_schema_creates_canonical_materialized_views(
+    postgres_database_url: str,
+) -> None:
+    create_database_schema(postgres_database_url)
+
+    engine = create_database_engine(postgres_database_url)
+    with engine.connect() as connection:
+        relation_names = {
+            row[0]
+            for row in connection.execute(
+                text(
+                    "SELECT matviewname "
+                    "FROM pg_matviews "
+                    "WHERE schemaname = current_schema()"
+                )
+            )
+        }
+    engine.dispose()
+
+    assert {
+        "bold_exact",
+        "bold_series",
+        "t1w_exact",
+        "t1w_series",
+        "t2w_exact",
+        "t2w_series",
+    }.issubset(relation_names)

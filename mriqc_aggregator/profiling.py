@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import Select, String, Text, case, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from .canonical_views import canonical_view_table, supports_canonical_views
 from .database import create_session_factory
 from .metrics import supported_metric_fields
 from .models import BoldRecord, T1wRecord, T2wRecord
@@ -207,11 +208,18 @@ def _view_subquery(
     filters: ObservationFilters,
     *,
     name: str,
+    use_canonical_views: bool = False,
 ) -> Any:
-    filtered = _filtered_subquery(model, filters, name=f"{name}_filtered")
     if view is ObservationView.RAW:
-        return filtered
+        return _filtered_subquery(model, filters, name=f"{name}_filtered")
 
+    if use_canonical_views:
+        canonical_table = canonical_view_table(model, view.value)
+        statement = select(*canonical_table.c)
+        statement = _apply_filters(statement, canonical_table.c, filters)
+        return statement.subquery(name)
+
+    filtered = _filtered_subquery(model, filters, name=f"{name}_filtered")
     key_column_name = (
         "dedupe_exact_key" if view is ObservationView.EXACT else "dedupe_series_key"
     )
@@ -320,6 +328,7 @@ class DatabaseProfiler:
         _model_for_modality(modality)
         effective_filters = filters or ObservationFilters()
         with self._session_factory() as session:
+            use_canonical = supports_canonical_views(session.get_bind())
             raw_base = _view_subquery(
                 MODALITY_MODEL_MAP[modality],
                 ObservationView.RAW,
@@ -331,6 +340,7 @@ class DatabaseProfiler:
                 view,
                 effective_filters,
                 name=f"{modality.lower()}_{view.value}",
+                use_canonical_views=use_canonical,
             )
             return {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -390,11 +400,13 @@ class DatabaseProfiler:
             )
         effective_filters = filters or ObservationFilters()
         with self._session_factory() as session:
+            use_canonical = supports_canonical_views(session.get_bind())
             base = _view_subquery(
                 MODALITY_MODEL_MAP[modality],
                 view,
                 effective_filters,
                 name=f"{modality.lower()}_{field_name}_{view.value}",
+                use_canonical_views=use_canonical,
             )
             return self._distribution(session, base, field_name, limit=limit)
 
@@ -408,11 +420,13 @@ class DatabaseProfiler:
         _model_for_modality(modality)
         effective_filters = filters or ObservationFilters()
         with self._session_factory() as session:
+            use_canonical = supports_canonical_views(session.get_bind())
             base = _view_subquery(
                 MODALITY_MODEL_MAP[modality],
                 view,
                 effective_filters,
                 name=f"{modality.lower()}_metric_summaries_{view.value}",
+                use_canonical_views=use_canonical,
             )
             return self._metric_summaries(session, modality, base)
 
@@ -428,11 +442,13 @@ class DatabaseProfiler:
         _validate_metric_field(modality, field_name)
         effective_filters = filters or ObservationFilters()
         with self._session_factory() as session:
+            use_canonical = supports_canonical_views(session.get_bind())
             base = _view_subquery(
                 MODALITY_MODEL_MAP[modality],
                 view,
                 effective_filters,
                 name=f"{modality.lower()}_{field_name}_metric_{view.value}",
+                use_canonical_views=use_canonical,
             )
             return self._metric_distribution(session, base, field_name, bins=bins)
 
@@ -445,11 +461,13 @@ class DatabaseProfiler:
     ) -> list[dict[str, Any]]:
         effective_filters = filters or ObservationFilters()
         with self._session_factory() as session:
+            use_canonical = supports_canonical_views(session.get_bind())
             base = _view_subquery(
                 MODALITY_MODEL_MAP[modality],
                 view,
                 effective_filters,
                 name=f"{modality.lower()}_missingness_{view.value}",
+                use_canonical_views=use_canonical,
             )
             return self._missingness(session, modality, base)
 
@@ -466,11 +484,13 @@ class DatabaseProfiler:
             raise ValueError(f"Unsupported extra field for {modality}: {column_name}")
         effective_filters = filters or ObservationFilters()
         with self._session_factory() as session:
+            use_canonical = supports_canonical_views(session.get_bind())
             base = _view_subquery(
                 MODALITY_MODEL_MAP[modality],
                 view,
                 effective_filters,
                 name=f"{modality.lower()}_{column_name}_{view.value}",
+                use_canonical_views=use_canonical,
             )
             return self._extra_key_counts(session, base, column_name, limit=limit)
 
@@ -507,6 +527,7 @@ class DatabaseProfiler:
         filters: ObservationFilters,
     ) -> dict[str, Any]:
         model = MODALITY_MODEL_MAP[modality]
+        use_canonical = supports_canonical_views(session.get_bind())
         raw_base = _view_subquery(
             model, ObservationView.RAW, filters, name=f"{modality.lower()}_overview_raw"
         )
@@ -515,12 +536,14 @@ class DatabaseProfiler:
             ObservationView.EXACT,
             filters,
             name=f"{modality.lower()}_overview_exact",
+            use_canonical_views=use_canonical,
         )
         series_base = _view_subquery(
             model,
             ObservationView.SERIES,
             filters,
             name=f"{modality.lower()}_overview_series",
+            use_canonical_views=use_canonical,
         )
         return {
             "modality": modality,
@@ -647,11 +670,13 @@ class DatabaseProfiler:
                 func.max(column).label("max"),
                 func.avg(column).label("mean"),
                 func.stddev_pop(column).label("stddev"),
+                func.percentile_cont(0.01).within_group(column).label("p01"),
                 func.percentile_cont(0.05).within_group(column).label("p05"),
                 func.percentile_cont(0.25).within_group(column).label("p25"),
                 func.percentile_cont(0.50).within_group(column).label("p50"),
                 func.percentile_cont(0.75).within_group(column).label("p75"),
                 func.percentile_cont(0.95).within_group(column).label("p95"),
+                func.percentile_cont(0.99).within_group(column).label("p99"),
             ).select_from(base)
         ).one()
         row_count = int(row._mapping["row_count"] or 0)
@@ -673,11 +698,13 @@ class DatabaseProfiler:
                 "mean": None,
                 "stddev": None,
                 "quantiles": {
+                    "p01": None,
                     "p05": None,
                     "p25": None,
                     "p50": None,
                     "p75": None,
                     "p95": None,
+                    "p99": None,
                 },
                 "histogram": [],
             }
@@ -739,11 +766,13 @@ class DatabaseProfiler:
             "mean": _float_or_none(row._mapping["mean"]),
             "stddev": _float_or_none(row._mapping["stddev"]),
             "quantiles": {
+                "p01": _float_or_none(row._mapping["p01"]),
                 "p05": _float_or_none(row._mapping["p05"]),
                 "p25": _float_or_none(row._mapping["p25"]),
                 "p50": _float_or_none(row._mapping["p50"]),
                 "p75": _float_or_none(row._mapping["p75"]),
                 "p95": _float_or_none(row._mapping["p95"]),
+                "p99": _float_or_none(row._mapping["p99"]),
             },
             "histogram": histogram,
         }

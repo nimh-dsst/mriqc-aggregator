@@ -1,5 +1,7 @@
 import { Suspense, lazy, startTransition, useEffect, useMemo, useState } from "react"
+import { SlidersHorizontalIcon } from "lucide-react"
 import { AppSidebar } from "@/components/qc-measures-sidebar"
+import { DashboardFiltersBar } from "@/components/dashboard-filters"
 import { ViewSwitcher } from "@/components/view-switcher"
 import {
   describeMetric,
@@ -9,6 +11,7 @@ import {
 import {
   fetchMetricSummaries,
   fetchModalities,
+  fetchValueDistribution,
 } from "@/lib/api"
 import type { UploadedFileDraft, UploadedReportBundle } from "@/lib/uploaded-report"
 import { cn } from "@/lib/utils"
@@ -26,12 +29,23 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { EMPTY_FILTERS } from "@/types/ui"
 import type {
+  DashboardFilters,
+  HistogramWindow,
   MetricCatalog,
   MetricDistribution,
   MetricId,
   MetricSummary,
   ModalityId,
+  ValueDistribution,
   ViewId,
 } from "@/types/ui"
 
@@ -68,6 +82,14 @@ function readUrlState() {
         .filter(Boolean) ?? (metric ? [metric] : []),
     query: params.get("q") ?? "",
     view: (params.get("view") as ViewId | null) ?? "series",
+    filters: {
+      manufacturers: params.getAll("manufacturers"),
+      mriqcVersions: params.getAll("mriqc_versions"),
+      taskIds: params.getAll("task_ids"),
+      sourceCreatedFrom: params.get("source_created_from"),
+      sourceCreatedTo: params.get("source_created_to"),
+    } satisfies DashboardFilters,
+    histogramWindow: (params.get("range") as HistogramWindow | null) ?? "p01-p99",
   }
 }
 
@@ -88,7 +110,16 @@ function getGridClassName(selectedCount: number) {
 }
 
 function App() {
-  const [{ modality: initialModality, metrics: initialMetrics, query: initialQuery, view: initialView }] =
+  const [
+    {
+      modality: initialModality,
+      metrics: initialMetrics,
+      query: initialQuery,
+      view: initialView,
+      filters: initialFilters,
+      histogramWindow: initialHistogramWindow,
+    },
+  ] =
     useState(() => readUrlState())
   const [catalogState, setCatalogState] = useState<CatalogState>({ status: "loading" })
   const [selectedModality, setSelectedModality] = useState<ModalityId>(
@@ -102,9 +133,16 @@ function App() {
       : {}
   )
   const [selectedView, setSelectedView] = useState<ViewId>(initialView)
+  const [filters, setFilters] = useState<DashboardFilters>(initialFilters ?? EMPTY_FILTERS)
+  const [histogramWindow, setHistogramWindow] = useState<HistogramWindow>(
+    initialHistogramWindow
+  )
   const [query, setQuery] = useState(initialQuery)
   const [remoteSummaries, setRemoteSummaries] = useState<MetricSummary[]>([])
   const [remoteSummariesError, setRemoteSummariesError] = useState<string | null>(null)
+  const [manufacturerOptions, setManufacturerOptions] = useState<ValueDistribution[]>([])
+  const [versionOptions, setVersionOptions] = useState<ValueDistribution[]>([])
+  const [taskOptions, setTaskOptions] = useState<ValueDistribution[]>([])
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null)
   const [uploadedReports, setUploadedReports] = useState<UploadedReportBundle | null>(null)
   const [pendingUploads, setPendingUploads] = useState<UploadedFileDraft[]>([])
@@ -163,7 +201,7 @@ function App() {
 
     let cancelled = false
 
-    void fetchMetricSummaries(activeModality, effectiveView).then(
+    void fetchMetricSummaries(activeModality, effectiveView, filters).then(
       (nextSummaries) => {
         if (!cancelled) {
           setRemoteSummaries(nextSummaries)
@@ -185,7 +223,44 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeModality, catalogState, effectiveView, showGlobalData])
+  }, [activeModality, catalogState, effectiveView, filters, showGlobalData])
+
+  useEffect(() => {
+    if (catalogState.status !== "ready" || !showGlobalData || effectiveShowUploadedData) {
+      return
+    }
+
+    let cancelled = false
+
+    void Promise.all([
+      fetchValueDistribution(activeModality, "manufacturer", effectiveView, EMPTY_FILTERS),
+      fetchValueDistribution(activeModality, "mriqc_version", effectiveView, EMPTY_FILTERS),
+      activeModality === "bold"
+        ? fetchValueDistribution(activeModality, "task_id", effectiveView, EMPTY_FILTERS)
+        : Promise.resolve([]),
+    ]).then(
+      ([nextManufacturers, nextVersions, nextTasks]) => {
+        if (cancelled) {
+          return
+        }
+        setManufacturerOptions(nextManufacturers)
+        setVersionOptions(nextVersions)
+        setTaskOptions(nextTasks)
+      },
+      () => {
+        if (cancelled) {
+          return
+        }
+        setManufacturerOptions([])
+        setVersionOptions([])
+        setTaskOptions([])
+      }
+    )
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeModality, catalogState, effectiveShowUploadedData, effectiveView, showGlobalData])
 
   const selectedMetrics = useMemo(() => {
     if (catalogState.status !== "ready") {
@@ -228,13 +303,29 @@ function App() {
       params.set("metrics", selectedMetrics.join(","))
     }
     params.set("view", effectiveView)
+    params.set("range", histogramWindow)
     if (query.trim()) {
       params.set("q", query.trim())
+    }
+    for (const manufacturer of filters.manufacturers) {
+      params.append("manufacturers", manufacturer)
+    }
+    for (const version of filters.mriqcVersions) {
+      params.append("mriqc_versions", version)
+    }
+    for (const taskId of filters.taskIds) {
+      params.append("task_ids", taskId)
+    }
+    if (filters.sourceCreatedFrom) {
+      params.set("source_created_from", filters.sourceCreatedFrom)
+    }
+    if (filters.sourceCreatedTo) {
+      params.set("source_created_to", filters.sourceCreatedTo)
     }
 
     const nextUrl = `${window.location.pathname}?${params.toString()}`
     window.history.replaceState(null, "", nextUrl)
-  }, [activeModality, effectiveView, query, selectedMetrics])
+  }, [activeModality, effectiveView, filters, histogramWindow, query, selectedMetrics])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -246,6 +337,8 @@ function App() {
         [nextModality]: nextState.metrics,
       }))
       setSelectedView(nextState.view)
+      setFilters(nextState.filters)
+      setHistogramWindow(nextState.histogramWindow)
       setQuery(nextState.query)
     }
 
@@ -276,6 +369,13 @@ function App() {
       ? remoteSummaries
       : activeUploadedReport?.summaries ?? []
   const summariesError = showGlobalData ? remoteSummariesError : null
+  const activeFilterCount =
+    filters.manufacturers.length +
+    filters.mriqcVersions.length +
+    filters.taskIds.length +
+    (filters.sourceCreatedFrom ? 1 : 0) +
+    (filters.sourceCreatedTo ? 1 : 0)
+  const filterKey = JSON.stringify(filters)
 
   const updateSelectedMetrics = (nextMetrics: MetricId[]) => {
     startTransition(() => {
@@ -433,6 +533,9 @@ function App() {
   const handleSelectModality = (modality: ModalityId) => {
     startTransition(() => {
       setSelectedModality(modality)
+      if (modality !== "bold") {
+        setFilters((current) => ({ ...current, taskIds: [] }))
+      }
     })
   }
 
@@ -624,6 +727,35 @@ function App() {
                       </span>
                     )}
                     </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="outline" size="sm" className="rounded-full">
+                          <SlidersHorizontalIcon className="size-4" />
+                          Range ·{" "}
+                          {histogramWindow === "full"
+                            ? "Full"
+                            : histogramWindow === "p01-p99"
+                              ? "P01-P99"
+                              : "P05-P95"}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuRadioGroup
+                          value={histogramWindow}
+                          onValueChange={(value) =>
+                            setHistogramWindow(value as HistogramWindow)
+                          }
+                        >
+                          <DropdownMenuRadioItem value="p01-p99">
+                            Central 98%
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="p05-p95">
+                            Central 90%
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="full">Full range</DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <ViewSwitcher
                       selectedView={effectiveView}
                       onSelectView={(view) =>
@@ -632,6 +764,24 @@ function App() {
                     />
                   </div>
                 </div>
+                {showGlobalData && !effectiveShowUploadedData ? (
+                  <div className="flex flex-col gap-3 border-t border-border/60 pt-3">
+                    <DashboardFiltersBar
+                      filters={filters}
+                      manufacturerOptions={manufacturerOptions}
+                      versionOptions={versionOptions}
+                      taskOptions={taskOptions}
+                      onChange={setFilters}
+                      onReset={() => setFilters(EMPTY_FILTERS)}
+                    />
+                    {activeFilterCount > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Active filters narrow the shared MRIQC reference before summaries and
+                        histograms are computed.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
             {activeUploadedReport ? (
@@ -663,12 +813,14 @@ function App() {
                 <div className={cn("grid gap-5", getGridClassName(selectedMetricDescriptors.length))}>
                   {selectedMetricDescriptors.map((descriptor) => (
                     <MetricHistogramCard
-                      key={`${activeModality}:${descriptor.field}:${effectiveView}`}
+                      key={`${activeModality}:${descriptor.field}:${effectiveView}:${filterKey}:${showGlobalData}`}
                       modality={activeModality}
                       metric={descriptor.field}
                       metricLabel={descriptor.label}
                       metricDescription={describeMetric(descriptor)}
                       selectedView={effectiveView}
+                      filters={filters}
+                      histogramWindow={histogramWindow}
                       uploadedDistribution={activeDistributions[descriptor.field] ?? null}
                       showGlobal={showGlobalData}
                       showUploaded={effectiveShowUploadedData}

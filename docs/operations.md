@@ -42,8 +42,8 @@ docker exec mriqc-aggregator-postgres-1 \
 
 ## Performance Notes
 
-The current dashboard is optimized for low-risk read performance rather than
-full precomputation.
+The dashboard now serves `exact` and `series` from PostgreSQL materialized
+views instead of recomputing representative rows on every request.
 
 ### What Helps Now
 
@@ -51,17 +51,22 @@ full precomputation.
   into separate chunks instead of shipping one large JavaScript bundle.
 - The frontend memoizes identical API requests in memory and deduplicates
   in-flight fetches.
+- The frontend exposes manufacturer, MRIQC version, task, and date filters so
+  the dashboard can narrow the reference set before computing charts.
+- Histogram cards default to a clipped display range (`p01`–`p99`) so extreme
+  outliers do not flatten the plot.
 - The API adds a per-worker timed response cache for read endpoints and returns
   `Cache-Control` plus `X-MRIQC-Cache` headers.
 - Histogram/statistics queries now compute aggregates in PostgreSQL instead of
   pulling every value into Python first.
+- `exact` and `series` now read from materialized canonical views (`*_exact`,
+  `*_series`) that are refreshed after loader runs.
 
 ### What Still Costs Time
 
-The expensive path is still the `series` and `exact` views on large modalities,
-especially `bold`. Those views deduplicate on demand, so a cold request can
-still take several seconds while PostgreSQL ranks the latest row for each
-dedupe key.
+Cold histogram and summary requests on the large canonical views can still take
+noticeable time, especially when the dashboard asks for several metrics at
+once or when filters still leave a very large `bold` subset in play.
 
 In practice this means:
 
@@ -69,10 +74,21 @@ In practice this means:
 - repeated requests with the same parameters should be much faster
 - restarting the API clears the in-process cache
 
+### Refresh Canonical Views
+
+Canonical materialized views are refreshed automatically by `load-raw-run` and
+`load-dump`. If you bulk edit the database in some other way, refresh them
+explicitly:
+
+```bash
+pixi run python -m mriqc_aggregator.cli refresh-canonical-views --modalities bold T1w T2w
+```
+
 ### How To Warm The Cache
 
 If you want the main dashboard view to be ready immediately after a deploy,
-prime the common responses once from the host:
+prime the common responses once from the host after the canonical views are in
+sync:
 
 ```bash
 curl -fsS https://mriqcdb-aggregator.site/api/v1/modalities >/dev/null
@@ -82,10 +98,10 @@ curl -fsS 'https://mriqcdb-aggregator.site/api/v1/modalities/bold/metrics/tsnr?v
 
 ## Next Steps If This Is Still Too Slow
 
-The next material performance step is not more request caching. It is reducing
-or eliminating on-demand dedupe work for the large tables. The likely options
-are:
+The next material performance step is not more request caching. The likely next
+layer is precomputed aggregate serving data on top of the canonical views:
 
-- dedicated indexes tuned for the `series` and `exact` ranking order
-- precomputed canonical tables for `raw` / `exact` / `series`
 - precomputed summary tables or materialized views for the dashboard endpoints
+- dedicated aggregate tables for common filter combinations
+- request bundling for multi-metric dashboard loads when the selected metric
+  count is high
