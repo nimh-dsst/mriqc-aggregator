@@ -12,6 +12,19 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { DashboardFilters, ValueDistribution } from "@/types/ui"
 
+function formatOffset(totalMinutes: number) {
+  const sign = totalMinutes <= 0 ? "+" : "-"
+  const absoluteMinutes = Math.abs(totalMinutes)
+  const hours = String(Math.floor(absoluteMinutes / 60)).padStart(2, "0")
+  const minutes = String(absoluteMinutes % 60).padStart(2, "0")
+  return `${sign}${hours}:${minutes}`
+}
+
+function localDateBoundary(dateValue: string, timeOfDay: string) {
+  const localDate = new Date(`${dateValue}T${timeOfDay}`)
+  return `${dateValue}T${timeOfDay}${formatOffset(localDate.getTimezoneOffset())}`
+}
+
 function formatFilterSummary(selected: string[], total: number, emptyLabel: string) {
   if (selected.length === 0) {
     return emptyLabel
@@ -133,7 +146,9 @@ export function DashboardFiltersBar({
           onChange={(event) =>
             onChange({
               ...filters,
-              sourceCreatedFrom: event.target.value ? `${event.target.value}T00:00:00Z` : null,
+              sourceCreatedFrom: event.target.value
+                ? localDateBoundary(event.target.value, "00:00:00")
+                : null,
             })
           }
         />
@@ -147,7 +162,9 @@ export function DashboardFiltersBar({
           onChange={(event) =>
             onChange({
               ...filters,
-              sourceCreatedTo: event.target.value ? `${event.target.value}T23:59:59Z` : null,
+              sourceCreatedTo: event.target.value
+                ? localDateBoundary(event.target.value, "23:59:59")
+                : null,
             })
           }
         />

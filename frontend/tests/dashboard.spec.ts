@@ -90,3 +90,30 @@ test("uploaded data re-enables raw view when it becomes visible", async ({ page 
   await expect(page).toHaveURL(/view=raw/)
   await expect(page.getByText(/uploaded dataset active: 3 rows from demo-bold\.csv/i)).toBeVisible()
 })
+
+test("date filters replace stale histograms with loading and empty states", async ({
+  page,
+}) => {
+  await page.goto("/")
+
+  await expect(
+    page.getByRole("heading", { name: "AFNI outlier ratio" })
+  ).toBeVisible()
+  await expect(page.getByText(/Samples · 3/i)).toBeVisible()
+
+  await page.route(
+    /\/api\/v1\/modalities\/bold\/metrics\/aor\?.*source_created_from=/,
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 750))
+      await route.continue()
+    }
+  )
+
+  const dateInputs = page.locator('input[type="date"]')
+  await dateInputs.nth(0).fill("2026-04-19")
+  await dateInputs.nth(1).fill("2026-04-19")
+
+  await expect(page).toHaveURL(/source_created_from=/)
+  await expect(page.getByText("Loading metric distribution…")).toBeVisible()
+  await expect(page.getByText("No values available for this metric.")).toBeVisible()
+})
