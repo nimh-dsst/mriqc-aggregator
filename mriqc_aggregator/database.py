@@ -5,6 +5,7 @@ import os
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
+from .canonical_views import ensure_canonical_views
 from .models import Base
 
 
@@ -37,6 +38,7 @@ def create_database_schema(url: str | None = None, *, echo: bool = False) -> Non
         for table in Base.metadata.sorted_tables:
             for index in table.indexes:
                 index.create(connection, checkfirst=True)
+        ensure_canonical_views(connection)
 
 
 def create_session_factory(

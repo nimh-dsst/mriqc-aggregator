@@ -1,7 +1,9 @@
 import type {
+  DashboardFilters,
   MetricCatalog,
   MetricDistribution,
   MetricSummary,
+  ValueDistribution,
   ViewId,
 } from "@/types/ui"
 
@@ -31,6 +33,14 @@ type MetricSummariesResponse = {
   view: ViewId
   filters: Record<string, unknown>
   metrics: MetricSummary[]
+}
+
+type ValueDistributionResponse = {
+  modality: string
+  field: string
+  view: ViewId
+  filters: Record<string, unknown>
+  values: ValueDistribution[]
 }
 
 const responseCache = new Map<string, CacheEntry>()
@@ -87,6 +97,33 @@ async function fetchJson<T>(path: string): Promise<T> {
   }
 }
 
+function buildFiltersQuery(filters: DashboardFilters) {
+  const params = new URLSearchParams()
+
+  for (const manufacturer of filters.manufacturers) {
+    params.append("manufacturers", manufacturer)
+  }
+  for (const version of filters.mriqcVersions) {
+    params.append("mriqc_versions", version)
+  }
+  for (const taskId of filters.taskIds) {
+    params.append("task_ids", taskId)
+  }
+  if (filters.sourceCreatedFrom) {
+    params.set("source_created_from", filters.sourceCreatedFrom)
+  }
+  if (filters.sourceCreatedTo) {
+    params.set("source_created_to", filters.sourceCreatedTo)
+  }
+
+  return params
+}
+
+function appendQuery(path: string, params: URLSearchParams) {
+  const query = params.toString()
+  return query ? `${path}?${query}` : path
+}
+
 export async function fetchModalities(): Promise<MetricCatalog> {
   const payload = await fetchJson<ModalitiesResponse>("/modalities")
   return payload.modalities
@@ -94,10 +131,13 @@ export async function fetchModalities(): Promise<MetricCatalog> {
 
 export async function fetchMetricSummaries(
   modality: string,
-  view: ViewId
+  view: ViewId,
+  filters: DashboardFilters
 ): Promise<MetricSummary[]> {
+  const params = buildFiltersQuery(filters)
+  params.set("view", view)
   const payload = await fetchJson<MetricSummariesResponse>(
-    `/modalities/${modality}/metrics?view=${view}`
+    appendQuery(`/modalities/${modality}/metrics`, params)
   )
   return payload.metrics
 }
@@ -106,10 +146,30 @@ export async function fetchMetricDistribution(
   modality: string,
   fieldName: string,
   view: ViewId,
+  filters: DashboardFilters,
   bins = 24
 ): Promise<MetricDistribution> {
+  const params = buildFiltersQuery(filters)
+  params.set("view", view)
+  params.set("bins", String(bins))
   const payload = await fetchJson<MetricDistributionResponse>(
-    `/modalities/${modality}/metrics/${fieldName}?view=${view}&bins=${bins}`
+    appendQuery(`/modalities/${modality}/metrics/${fieldName}`, params)
   )
   return payload.distribution
+}
+
+export async function fetchValueDistribution(
+  modality: string,
+  fieldName: string,
+  view: ViewId,
+  filters: DashboardFilters,
+  limit = 24
+): Promise<ValueDistribution[]> {
+  const params = buildFiltersQuery(filters)
+  params.set("view", view)
+  params.set("limit", String(limit))
+  const payload = await fetchJson<ValueDistributionResponse>(
+    appendQuery(`/modalities/${modality}/distributions/${fieldName}`, params)
+  )
+  return payload.values
 }

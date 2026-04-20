@@ -22,6 +22,7 @@ from .database import (
     create_database_schema,
     default_database_url,
 )
+from .canonical_views import refresh_canonical_views
 from .models import BoldRecord, T1wRecord, T2wRecord
 from .parsing import ParsedObservation, parse_observation, parse_page_number
 
@@ -504,6 +505,7 @@ def load_raw_run(
                     summary.per_modality[modality],
                 )
 
+    refresh_canonical_views(url=url, modalities=selected_modalities)
     return summary
 
 
@@ -584,6 +586,7 @@ def load_dump(
                         summary.per_modality[modality],
                     )
 
+        refresh_canonical_views(engine=engine, modalities=selected_modalities)
         return summary
 
     with Session(engine) as session:
@@ -630,4 +633,5 @@ def load_dump(
                     write_rows=_insert_or_skip_rows,
                 )
 
+    refresh_canonical_views(url=url, modalities=selected_modalities)
     return summary

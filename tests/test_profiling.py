@@ -425,5 +425,7 @@ def test_fastapi_profile_endpoint_returns_expected_payload(
         assert metric_distribution_response.status_code == 200
         distribution = metric_distribution_response.json()["distribution"]
         assert distribution["mean"] == pytest.approx(0.4)
+        assert distribution["quantiles"]["p01"] == pytest.approx(0.106, abs=1e-3)
         assert distribution["quantiles"]["p50"] == pytest.approx(0.4)
+        assert distribution["quantiles"]["p99"] == pytest.approx(0.694, abs=1e-3)
         assert sum(bucket["count"] for bucket in distribution["histogram"]) == 3

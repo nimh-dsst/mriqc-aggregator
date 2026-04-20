@@ -3,7 +3,14 @@ import { XIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { fetchMetricDistribution } from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import type { MetricDistribution, MetricId, ModalityId, ViewId } from "@/types/ui"
+import type {
+  DashboardFilters,
+  HistogramWindow,
+  MetricDistribution,
+  MetricId,
+  ModalityId,
+  ViewId,
+} from "@/types/ui"
 
 type LoadState =
   | { status: "loading" }
@@ -35,7 +42,6 @@ function buildBucketEdges(min: number, max: number, bucketCount: number) {
 }
 
 function rebinHistogram(distribution: MetricDistribution, edges: number[]) {
-  const totalCount = distribution.value_count || 1
   const rebinned = new Array(Math.max(0, edges.length - 1)).fill(0)
 
   for (const bucket of distribution.histogram) {
@@ -65,7 +71,53 @@ function rebinHistogram(distribution: MetricDistribution, edges: number[]) {
     }
   }
 
-  return rebinned.map((count) => count / totalCount)
+  return rebinned
+}
+
+function resolveDisplayRange(
+  distributions: MetricDistribution[],
+  windowMode: HistogramWindow
+) {
+  const bounds = distributions
+    .map((distribution) => {
+      if (windowMode === "p05-p95") {
+        return {
+          min: distribution.quantiles.p05 ?? distribution.min,
+          max: distribution.quantiles.p95 ?? distribution.max,
+        }
+      }
+
+      if (windowMode === "p01-p99") {
+        return {
+          min: distribution.quantiles.p01 ?? distribution.quantiles.p05 ?? distribution.min,
+          max: distribution.quantiles.p99 ?? distribution.quantiles.p95 ?? distribution.max,
+        }
+      }
+
+      return {
+        min: distribution.min,
+        max: distribution.max,
+      }
+    })
+    .filter(
+      (entry): entry is { min: number; max: number } =>
+        entry.min !== null &&
+        entry.max !== null &&
+        Number.isFinite(entry.min) &&
+        Number.isFinite(entry.max)
+    )
+
+  if (!bounds.length) {
+    return null
+  }
+
+  const minValue = Math.min(...bounds.map((entry) => entry.min))
+  const maxValue = Math.max(...bounds.map((entry) => entry.max))
+  if (!(maxValue > minValue)) {
+    return null
+  }
+
+  return { minValue, maxValue }
 }
 
 export function MetricHistogramCard({
@@ -79,6 +131,8 @@ export function MetricHistogramCard({
   uploadedDistribution,
   showGlobal = true,
   showUploaded = false,
+  filters,
+  histogramWindow,
 }: {
   modality: ModalityId
   metric: MetricId
@@ -90,6 +144,8 @@ export function MetricHistogramCard({
   uploadedDistribution?: MetricDistribution | null
   showGlobal?: boolean
   showUploaded?: boolean
+  filters: DashboardFilters
+  histogramWindow: HistogramWindow
 }) {
   const [state, setState] = useState<LoadState>({ status: "loading" })
 
@@ -100,7 +156,7 @@ export function MetricHistogramCard({
 
     let cancelled = false
 
-    void fetchMetricDistribution(modality, metric, selectedView).then(
+    void fetchMetricDistribution(modality, metric, selectedView, filters).then(
       (distribution) => {
         if (!cancelled) {
           setState({ status: "ready", distribution })
@@ -111,9 +167,11 @@ export function MetricHistogramCard({
           setState({
             status: "error",
             message:
-              error instanceof Error
-                ? error.message
-                : "Unexpected error while loading the metric distribution.",
+              error instanceof Error && error.message.includes("status 404")
+                ? `The API does not currently expose ${metric} for ${modality} in ${selectedView} view.`
+                : error instanceof Error
+                  ? error.message
+                  : "Unexpected error while loading the metric distribution.",
           })
         }
       }
@@ -122,7 +180,7 @@ export function MetricHistogramCard({
     return () => {
       cancelled = true
     }
-  }, [metric, modality, selectedView, showGlobal])
+  }, [filters, metric, modality, selectedView, showGlobal])
 
   if (showGlobal && state.status === "loading") {
     return (
@@ -182,26 +240,41 @@ export function MetricHistogramCard({
     )
   }
 
-  const minValue = Math.min(...visibleDistributions.map((entry) => entry.min ?? Infinity))
-  const maxValue = Math.max(...visibleDistributions.map((entry) => entry.max ?? -Infinity))
   const bucketCount = Math.max(
     ...visibleDistributions.map((entry) => entry.histogram.length || 1)
   )
-  const edges = buildBucketEdges(minValue, maxValue, bucketCount)
-  const globalProbabilities = globalDistribution
+  const displayRange = resolveDisplayRange(visibleDistributions, histogramWindow)
+  const edges = buildBucketEdges(
+    displayRange?.minValue ?? distribution.min ?? 0,
+    displayRange?.maxValue ?? distribution.max ?? 1,
+    bucketCount
+  )
+  const globalCounts = globalDistribution
     ? rebinHistogram(globalDistribution, edges)
     : new Array(bucketCount).fill(0)
-  const uploadedProbabilities = visibleUploadedDistribution
+  const uploadedCounts = visibleUploadedDistribution
     ? rebinHistogram(visibleUploadedDistribution, edges)
+    : new Array(bucketCount).fill(0)
+  const globalProbabilities = globalDistribution
+    ? globalCounts.map((count) => count / Math.max(globalDistribution.value_count, 1))
+    : new Array(bucketCount).fill(0)
+  const uploadedProbabilities = visibleUploadedDistribution
+    ? uploadedCounts.map((count) => count / Math.max(visibleUploadedDistribution.value_count, 1))
     : new Array(bucketCount).fill(0)
   const chartData = edges.slice(0, -1).map((start, index) => ({
     label: formatBucketLabel(start, edges[index + 1]),
     globalProbability: globalProbabilities[index] ?? 0,
     uploadedProbability: uploadedProbabilities[index] ?? 0,
-    globalCount: globalDistribution?.histogram[index]?.count ?? 0,
-    uploadedCount: visibleUploadedDistribution?.histogram[index]?.count ?? 0,
+    globalCount: Math.round(globalCounts[index] ?? 0),
+    uploadedCount: Math.round(uploadedCounts[index] ?? 0),
   }))
   const showCountLabels = chartData.length <= 12 && visibleDistributions.length === 1
+  const chartRangeSummary =
+    histogramWindow === "full"
+      ? "Showing full value range."
+      : histogramWindow === "p01-p99"
+        ? "Showing the central 98% display range."
+        : "Showing the central 90% display range."
 
   return (
     <section
@@ -237,6 +310,7 @@ export function MetricHistogramCard({
               {metricDescription ??
                 `Normalized binned distribution for ${modality} observations in the ${selectedView} view.`}
             </p>
+            <p className="mt-2 text-[11px] text-muted-foreground">{chartRangeSummary}</p>
           </div>
           <div className={compact ? "flex items-start pr-8" : "flex flex-col items-end gap-3 pr-10"}>
             {visibleDistributions.length === 2 ? (

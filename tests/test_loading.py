@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
 from mriqc_aggregator.database import create_database_schema
@@ -290,6 +290,44 @@ def test_load_raw_run_updates_existing_row(
     engine.dispose()
 
     assert record.manufacturer == "GE"
+
+
+def test_load_raw_run_refreshes_canonical_materialized_views(
+    tmp_path: Path,
+    postgres_database_url: str,
+) -> None:
+    run_root = tmp_path / "runs" / "test-run"
+    _write_t1w_page(
+        run_root,
+        source_id="abc123def456abc123def456",
+        manufacturer="Siemens",
+        page_number=1,
+    )
+    _write_t1w_page(
+        run_root,
+        source_id="def456abc123def456abc123",
+        manufacturer="Siemens",
+        page_number=2,
+    )
+
+    load_raw_run(
+        run_root=run_root,
+        database_url=postgres_database_url,
+        batch_size=1,
+    )
+
+    engine = create_engine(postgres_database_url)
+    with engine.connect() as connection:
+        exact_count = connection.execute(
+            text("SELECT count(*) FROM t1w_exact")
+        ).scalar_one()
+        series_count = connection.execute(
+            text("SELECT count(*) FROM t1w_series")
+        ).scalar_one()
+    engine.dispose()
+
+    assert exact_count == 1
+    assert series_count == 1
 
 
 def test_load_raw_run_handles_mixed_optional_columns_in_batch(

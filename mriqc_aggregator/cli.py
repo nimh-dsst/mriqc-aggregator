@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .canonical_views import refresh_canonical_views
 from .loading import load_dump, load_raw_run
 from .profiling import ObservationView, write_database_profile
 from .workflows import MODALITIES, pull_representative_sample
@@ -135,6 +136,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit a progress line every N rows per modality. Use 0 to disable.",
     )
 
+    refresh_parser = subparsers.add_parser(
+        "refresh-canonical-views",
+        help="Refresh the materialized exact/series views used by the dashboard.",
+    )
+    refresh_parser.add_argument(
+        "--database-url",
+        help="Database URL override. Defaults to MRIQC_DATABASE_URL.",
+    )
+    refresh_parser.add_argument(
+        "--modalities",
+        nargs="+",
+        default=list(MODALITIES),
+        choices=list(MODALITIES),
+        help="Modalities to refresh.",
+    )
+
     profile_parser = subparsers.add_parser(
         "profile-db",
         help="Profile loaded PostgreSQL data for backend exploration.",
@@ -227,6 +244,14 @@ def main(argv: list[str] | None = None) -> int:
             progress_every=args.progress_every or None,
         )
         print(summary.to_dict())
+        return 0
+
+    if args.command == "refresh-canonical-views":
+        refresh_canonical_views(
+            url=args.database_url,
+            modalities=args.modalities,
+        )
+        print({"database_url": args.database_url, "modalities": args.modalities})
         return 0
 
     if args.command == "profile-db":

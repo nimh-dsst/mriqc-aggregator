@@ -99,3 +99,31 @@ def test_main_dispatches_profile_db(monkeypatch, capsys, tmp_path: Path) -> None
     assert capsys.readouterr().out.strip() == (
         f"Database profile written to {tmp_path / 'docs' / 'temp' / 'profile-run'}"
     )
+
+
+def test_main_dispatches_refresh_canonical_views(monkeypatch, capsys) -> None:
+    called: dict[str, object] = {}
+
+    def fake_refresh_canonical_views(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr(cli, "refresh_canonical_views", fake_refresh_canonical_views)
+
+    exit_code = cli.main(
+        [
+            "refresh-canonical-views",
+            "--database-url",
+            "postgresql+psycopg://example",
+            "--modalities",
+            "bold",
+            "T1w",
+        ]
+    )
+
+    assert exit_code == 0
+    assert called["url"] == "postgresql+psycopg://example"
+    assert called["modalities"] == ["bold", "T1w"]
+    assert (
+        capsys.readouterr().out.strip()
+        == "{'database_url': 'postgresql+psycopg://example', 'modalities': ['bold', 'T1w']}"
+    )
