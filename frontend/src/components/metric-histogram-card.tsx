@@ -13,9 +13,9 @@ import type {
 } from "@/types/ui"
 
 type LoadState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; distribution: MetricDistribution }
+  | { status: "loading"; requestKey: string }
+  | { status: "error"; message: string; requestKey: string }
+  | { status: "ready"; distribution: MetricDistribution; requestKey: string }
 
 function formatMetricValue(value: number | null, digits = 3) {
   if (value === null) {
@@ -147,7 +147,11 @@ export function MetricHistogramCard({
   filters: DashboardFilters
   histogramWindow: HistogramWindow
 }) {
-  const [state, setState] = useState<LoadState>({ status: "loading" })
+  const requestKey = JSON.stringify({ modality, metric, selectedView, filters })
+  const [state, setState] = useState<LoadState>({
+    status: "loading",
+    requestKey,
+  })
 
   useEffect(() => {
     if (!showGlobal) {
@@ -159,13 +163,14 @@ export function MetricHistogramCard({
     void fetchMetricDistribution(modality, metric, selectedView, filters).then(
       (distribution) => {
         if (!cancelled) {
-          setState({ status: "ready", distribution })
+          setState({ status: "ready", distribution, requestKey })
         }
       },
       (error: unknown) => {
         if (!cancelled) {
           setState({
             status: "error",
+            requestKey,
             message:
               error instanceof Error && error.message.includes("status 404")
                 ? `The API does not currently expose ${metric} for ${modality} in ${selectedView} view.`
@@ -180,9 +185,11 @@ export function MetricHistogramCard({
     return () => {
       cancelled = true
     }
-  }, [filters, metric, modality, selectedView, showGlobal])
+  }, [filters, metric, modality, requestKey, selectedView, showGlobal])
 
-  if (showGlobal && state.status === "loading") {
+  const isRefreshing = showGlobal && state.requestKey !== requestKey
+
+  if (showGlobal && (state.status === "loading" || isRefreshing)) {
     return (
       <section className="rounded-3xl border border-border/70 bg-card/90 p-6 shadow-sm">
         <p className="text-sm text-muted-foreground">Loading metric distribution…</p>
