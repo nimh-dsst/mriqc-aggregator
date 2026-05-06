@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum as SQLEnum,
@@ -125,14 +126,14 @@ class SourceRecordMixin:
 
 
 class CommonBidsMixin:
-    subject_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    session_id: Mapped[str | None] = mapped_column(String(64))
+    subject_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(String(128))
     run_id: Mapped[str | None] = mapped_column(String(64))
     acq_id: Mapped[str | None] = mapped_column(String(64))
     task_id: Mapped[str | None] = mapped_column(String(128))
 
-    accel_num_reference_lines: Mapped[int | None] = mapped_column(Integer)
-    acceleration_factor_pe: Mapped[int | None] = mapped_column(Integer)
+    accel_num_reference_lines: Mapped[float | None] = mapped_column(Float)
+    acceleration_factor_pe: Mapped[float | None] = mapped_column(Float)
     acquisition_matrix: Mapped[str | None] = mapped_column(String(64))
     cog_atlas_id: Mapped[str | None] = mapped_column(String(128))
     cog_poid: Mapped[str | None] = mapped_column(String(128))
@@ -143,12 +144,12 @@ class CommonBidsMixin:
     delay_time: Mapped[float | None] = mapped_column(Float)
     device_serial_number: Mapped[str | None] = mapped_column(String(128))
     echo_time: Mapped[float | None] = mapped_column(Float)
-    echo_train_length: Mapped[int | None] = mapped_column(Integer)
+    echo_train_length: Mapped[float | None] = mapped_column(Float)
     effective_echo_spacing: Mapped[float | None] = mapped_column(Float)
-    flip_angle: Mapped[int | None] = mapped_column(Integer)
+    flip_angle: Mapped[float | None] = mapped_column(Float)
     gradient_set_type: Mapped[str | None] = mapped_column(String(128))
     hardcopy_device_software_version: Mapped[str | None] = mapped_column(String(64))
-    imaging_frequency: Mapped[int | None] = mapped_column(Integer)
+    imaging_frequency: Mapped[int | None] = mapped_column(BigInteger)
     in_plane_phase_encoding_direction: Mapped[str | None] = mapped_column(String(32))
     institution_address: Mapped[str | None] = mapped_column(Text)
     institution_name: Mapped[str | None] = mapped_column(String(255))
@@ -161,20 +162,20 @@ class CommonBidsMixin:
     manufacturers_model_name: Mapped[str | None] = mapped_column(String(128))
     matrix_coil_mode: Mapped[str | None] = mapped_column(String(64))
     multiband_acceleration_factor: Mapped[float | None] = mapped_column(Float)
-    number_of_averages: Mapped[int | None] = mapped_column(Integer)
+    number_of_averages: Mapped[float | None] = mapped_column(Float)
     number_of_phase_encoding_steps: Mapped[int | None] = mapped_column(Integer)
-    number_of_volumes_discarded_by_scanner: Mapped[float | None] = mapped_column(Float)
-    number_of_volumes_discarded_by_user: Mapped[float | None] = mapped_column(Float)
-    number_shots: Mapped[int | None] = mapped_column(Integer)
+    number_of_volumes_discarded_by_scanner: Mapped[int | None] = mapped_column(Integer)
+    number_of_volumes_discarded_by_user: Mapped[int | None] = mapped_column(Integer)
+    number_shots: Mapped[float | None] = mapped_column(Float)
     parallel_acquisition_technique: Mapped[str | None] = mapped_column(String(64))
     parallel_reduction_factor_in_plane: Mapped[float | None] = mapped_column(Float)
     partial_fourier: Mapped[bool | None] = mapped_column(Boolean)
     partial_fourier_direction: Mapped[str | None] = mapped_column(String(32))
     patient_position: Mapped[str | None] = mapped_column(String(128))
-    percent_phase_field_of_view: Mapped[int | None] = mapped_column(Integer)
-    percent_sampling: Mapped[int | None] = mapped_column(Integer)
+    percent_phase_field_of_view: Mapped[float | None] = mapped_column(Float)
+    percent_sampling: Mapped[float | None] = mapped_column(Float)
     phase_encoding_direction: Mapped[str | None] = mapped_column(String(32))
-    pixel_bandwidth: Mapped[int | None] = mapped_column(Integer)
+    pixel_bandwidth: Mapped[float | None] = mapped_column(Float)
     protocol_name: Mapped[str | None] = mapped_column(String(255))
     pulse_sequence_details: Mapped[str | None] = mapped_column(Text)
     pulse_sequence_type: Mapped[str | None] = mapped_column(String(128))
@@ -188,7 +189,7 @@ class CommonBidsMixin:
     software_versions: Mapped[str | None] = mapped_column(String(255))
     task_description: Mapped[str | None] = mapped_column(Text)
     total_readout_time: Mapped[float | None] = mapped_column(Float)
-    total_scan_time_sec: Mapped[int | None] = mapped_column(Integer)
+    total_scan_time_sec: Mapped[float | None] = mapped_column(Float)
     transmit_coil_name: Mapped[str | None] = mapped_column(String(128))
     variable_flip_angle_flag: Mapped[str | None] = mapped_column(String(32))
     bids_meta_extra: Mapped[dict[str, Any]] = mapped_column(
@@ -210,7 +211,7 @@ class StructuralIQMMixin:
     icvs_wm: Mapped[float] = mapped_column(Float, nullable=False)
     inu_med: Mapped[float] = mapped_column(Float, nullable=False)
     inu_range: Mapped[float] = mapped_column(Float, nullable=False)
-    qi_1: Mapped[float] = mapped_column(Float, nullable=False)
+    qi_1: Mapped[float | None] = mapped_column(Float)
     qi_2: Mapped[float] = mapped_column(Float, nullable=False)
     rpve_csf: Mapped[float] = mapped_column(Float, nullable=False)
     rpve_gm: Mapped[float] = mapped_column(Float, nullable=False)
@@ -262,14 +263,14 @@ class StructuralIQMMixin:
     summary_wm_stdv: Mapped[float] = mapped_column(Float, nullable=False)
     summary_wm_n: Mapped[float | None] = mapped_column(Float)
     tpm_overlap_csf: Mapped[float] = mapped_column(Float, nullable=False)
-    tpm_overlap_gm: Mapped[float] = mapped_column(Float, nullable=False)
-    tpm_overlap_wm: Mapped[float] = mapped_column(Float, nullable=False)
+    tpm_overlap_gm: Mapped[float | None] = mapped_column(Float)
+    tpm_overlap_wm: Mapped[float | None] = mapped_column(Float)
     wm2max: Mapped[float] = mapped_column(Float, nullable=False)
 
 
 class BoldIQMMixin:
     aor: Mapped[float] = mapped_column(Float, nullable=False)
-    aqi: Mapped[float] = mapped_column(Float, nullable=False)
+    aqi: Mapped[float | None] = mapped_column(Float)
     dummy_trs: Mapped[int | None] = mapped_column(Integer)
     dvars_nstd: Mapped[float] = mapped_column(Float, nullable=False)
     dvars_std: Mapped[float] = mapped_column(Float, nullable=False)
@@ -284,8 +285,8 @@ class BoldIQMMixin:
     fwhm_y: Mapped[float] = mapped_column(Float, nullable=False)
     fwhm_z: Mapped[float] = mapped_column(Float, nullable=False)
     gcor: Mapped[float] = mapped_column(Float, nullable=False)
-    gsr_x: Mapped[float] = mapped_column(Float, nullable=False)
-    gsr_y: Mapped[float] = mapped_column(Float, nullable=False)
+    gsr_x: Mapped[float | None] = mapped_column(Float)
+    gsr_y: Mapped[float | None] = mapped_column(Float)
     size_t: Mapped[float] = mapped_column(Float, nullable=False)
     size_x: Mapped[float] = mapped_column(Float, nullable=False)
     size_y: Mapped[float] = mapped_column(Float, nullable=False)
