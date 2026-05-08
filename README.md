@@ -96,6 +96,10 @@ Local development uses `compose.yaml` plus the automatically loaded
 3. `frontend` runs as a Vite dev server with `/api` proxied to the API container
 4. `nginx` is not part of the local stack by default
 
+On arm64 hosts where `DOCKER_DEFAULT_PLATFORM` is set to `linux/amd64`, set
+`FRONTEND_PLATFORM=linux/arm64` to avoid running the local Vite container through
+emulation.
+
 For the production shape, use the explicit production override:
 
 ```bash

@@ -9,11 +9,12 @@ services:
 
   frontend:
     image: node:22-alpine
+    platform: ${FRONTEND_PLATFORM:-}
     working_dir: /frontend
     command:
       - sh
       - -lc
-      - npm ci && npm run dev -- --host 0.0.0.0 --port ${FRONTEND_PORT:-5173}
+      - npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173
     environment:
       VITE_DEV_PROXY_TARGET: http://api:8000
     depends_on:
@@ -21,6 +22,17 @@ services:
         condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - --spider
+        - http://127.0.0.1:5173/
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     volumes:
       - ./frontend:/frontend
       - frontend-node-modules:/frontend/node_modules
