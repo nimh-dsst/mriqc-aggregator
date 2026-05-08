@@ -482,7 +482,7 @@ def test_load_dump_accepts_observed_schema_edge_values(
     assert fber_text == "NaN"
 
 
-def test_load_raw_run_coerces_nullable_extended_json_nonfinite_values(
+def test_load_raw_run_coerces_nullable_extended_json_nonfinite_values_and_preserves_finite(
     tmp_path: Path,
     postgres_database_url: str,
 ) -> None:
@@ -493,7 +493,7 @@ def test_load_raw_run_coerces_nullable_extended_json_nonfinite_values(
         manufacturer="Siemens",
         metric_overrides={
             "qi_1": {"$numberDouble": "NaN"},
-            "tpm_overlap_gm": {"$numberDouble": "Infinity"},
+            "tpm_overlap_gm": {"$numberDouble": "6.5"},
             "tpm_overlap_wm": {"$numberDouble": "-Infinity"},
         },
     )
@@ -510,5 +510,5 @@ def test_load_raw_run_coerces_nullable_extended_json_nonfinite_values(
     engine.dispose()
 
     assert record.qi_1 is None
-    assert record.tpm_overlap_gm is None
+    assert record.tpm_overlap_gm == 6.5
     assert record.tpm_overlap_wm is None

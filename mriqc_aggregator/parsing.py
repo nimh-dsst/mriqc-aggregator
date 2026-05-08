@@ -296,8 +296,8 @@ NULLABLE_NONFINITE_FIELDS = frozenset(
 
 
 def _coerce_finite(value: Any) -> Any:
-    if isinstance(value, dict) and "$numberDouble" in value:
-        return None
+    if isinstance(value, dict) and set(value) == {"$numberDouble"}:
+        value = float(value["$numberDouble"])
     if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
