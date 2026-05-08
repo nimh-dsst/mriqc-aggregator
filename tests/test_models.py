@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import BigInteger, Float, Integer, create_engine, inspect
 
 from mriqc_aggregator.models import Base, BoldRecord, T1wRecord, T2wRecord
 
@@ -56,3 +56,39 @@ def test_dump_overflow_prone_string_columns_allow_host_dump_values() -> None:
     assert T1wRecord.__table__.c.patient_position.type.length == 128
     assert T2wRecord.__table__.c.patient_position.type.length == 128
     assert BoldRecord.__table__.c.gradient_set_type.type.length == 128
+
+
+def test_schema_matches_observed_dump_edge_cases() -> None:
+    for model in (T1wRecord, T2wRecord, BoldRecord):
+        assert model.__table__.c.subject_id.type.length == 128
+        assert model.__table__.c.session_id.type.length == 128
+        assert isinstance(model.__table__.c.imaging_frequency.type, BigInteger)
+
+        for column_name in (
+            "accel_num_reference_lines",
+            "acceleration_factor_pe",
+            "echo_train_length",
+            "flip_angle",
+            "number_of_averages",
+            "number_shots",
+            "percent_phase_field_of_view",
+            "percent_sampling",
+            "pixel_bandwidth",
+            "total_scan_time_sec",
+        ):
+            assert isinstance(model.__table__.c[column_name].type, Float)
+
+        for column_name in (
+            "number_of_volumes_discarded_by_scanner",
+            "number_of_volumes_discarded_by_user",
+        ):
+            assert isinstance(model.__table__.c[column_name].type, Integer)
+
+    for model in (T1wRecord, T2wRecord):
+        assert model.__table__.c.qi_1.nullable
+        assert model.__table__.c.tpm_overlap_gm.nullable
+        assert model.__table__.c.tpm_overlap_wm.nullable
+
+    assert BoldRecord.__table__.c.aqi.nullable
+    assert BoldRecord.__table__.c.gsr_x.nullable
+    assert BoldRecord.__table__.c.gsr_y.nullable
