@@ -16,6 +16,8 @@ def _write_t1w_page(
     manufacturer: str,
     session_id: str | None = "session-1",
     page_number: int = 1,
+    bids_meta_overrides: dict[str, object] | None = None,
+    metric_overrides: dict[str, object] | None = None,
 ) -> None:
     payload = {
         "_items": [
@@ -108,6 +110,10 @@ def _write_t1w_page(
     }
     if session_id is not None:
         payload["_items"][0]["bids_meta"]["session_id"] = session_id
+    if bids_meta_overrides:
+        payload["_items"][0]["bids_meta"].update(bids_meta_overrides)
+    if metric_overrides:
+        payload["_items"][0].update(metric_overrides)
     raw_dir = run_root / "raw" / "T1w"
     raw_dir.mkdir(parents=True, exist_ok=True)
     (raw_dir / f"page-{page_number:06d}.json").write_text(
@@ -122,6 +128,8 @@ def _write_t1w_dump(
     source_id: str,
     manufacturer: str,
     session_id: str | None = "session-1",
+    bids_meta_overrides: dict[str, object] | None = None,
+    metric_overrides: dict[str, object] | None = None,
 ) -> None:
     payload = [
         {
@@ -212,6 +220,10 @@ def _write_t1w_dump(
     ]
     if session_id is not None:
         payload[0]["bids_meta"]["session_id"] = session_id
+    if bids_meta_overrides:
+        payload[0]["bids_meta"].update(bids_meta_overrides)
+    if metric_overrides:
+        payload[0].update(metric_overrides)
     dump_root.mkdir(parents=True, exist_ok=True)
     (dump_root / "mriqc_api.T1w.json").write_text(
         json.dumps(payload),
@@ -409,3 +421,94 @@ def test_load_dump_is_idempotent(tmp_path: Path, postgres_database_url: str) -> 
     assert record.source_page is None
     assert record.raw_payload_path.endswith("mriqc_api.T1w.json#item=1")
     assert record.manufacturer == "Siemens"
+
+
+def test_load_dump_accepts_observed_schema_edge_values(
+    tmp_path: Path,
+    postgres_database_url: str,
+) -> None:
+    dump_root = tmp_path / "dump"
+    long_subject_id = "sub-" + ("abcdef1234567890" * 5)
+    long_session_id = "ses-" + ("1234567890abcdef" * 5)
+    _write_t1w_dump(
+        dump_root,
+        source_id="abc123def456abc123def456",
+        manufacturer="Siemens",
+        session_id=long_session_id,
+        bids_meta_overrides={
+            "subject_id": long_subject_id,
+            "ImagingFrequency": {"$numberLong": "128000000000000"},
+            "FlipAngle": {"$numberDouble": "7.5"},
+            "NumberOfAverages": {"$numberDouble": "1.5"},
+            "NumberOfVolumesDiscardedByScanner": {"$numberInt": "2"},
+            "NumberOfVolumesDiscardedByUser": {"$numberInt": "1"},
+            "PixelBandwidth": {"$numberDouble": "123.45"},
+            "TotalScanTimeSec": {"$numberDouble": "420.25"},
+        },
+        metric_overrides={
+            "fber": {"$numberDouble": "NaN"},
+            "qi_1": {"$numberDouble": "NaN"},
+            "tpm_overlap_gm": {"$numberDouble": "Infinity"},
+            "tpm_overlap_wm": {"$numberDouble": "-Infinity"},
+        },
+    )
+
+    summary = load_dump(
+        dump_root=dump_root,
+        database_url=postgres_database_url,
+        batch_size=1,
+        progress_every=None,
+    )
+
+    engine = create_engine(postgres_database_url)
+    with Session(engine) as session:
+        record = session.execute(select(T1wRecord)).scalar_one()
+        fber_text = session.execute(text("select fber::text from t1w")).scalar_one()
+    engine.dispose()
+
+    assert summary.per_modality["T1w"].inserted_count == 1
+    assert record.subject_id == long_subject_id
+    assert record.session_id == long_session_id
+    assert record.imaging_frequency == 128000000000000
+    assert record.flip_angle == 7.5
+    assert record.number_of_averages == 1.5
+    assert record.number_of_volumes_discarded_by_scanner == 2
+    assert record.number_of_volumes_discarded_by_user == 1
+    assert record.pixel_bandwidth == 123.45
+    assert record.total_scan_time_sec == 420.25
+    assert record.qi_1 is None
+    assert record.tpm_overlap_gm is None
+    assert record.tpm_overlap_wm is None
+    assert fber_text == "NaN"
+
+
+def test_load_raw_run_coerces_nullable_extended_json_nonfinite_values(
+    tmp_path: Path,
+    postgres_database_url: str,
+) -> None:
+    run_root = tmp_path / "runs" / "test-run"
+    _write_t1w_page(
+        run_root,
+        source_id="abc123def456abc123def456",
+        manufacturer="Siemens",
+        metric_overrides={
+            "qi_1": {"$numberDouble": "NaN"},
+            "tpm_overlap_gm": {"$numberDouble": "Infinity"},
+            "tpm_overlap_wm": {"$numberDouble": "-Infinity"},
+        },
+    )
+
+    load_raw_run(
+        run_root=run_root,
+        database_url=postgres_database_url,
+        batch_size=1,
+    )
+
+    engine = create_engine(postgres_database_url)
+    with Session(engine) as session:
+        record = session.execute(select(T1wRecord)).scalar_one()
+    engine.dispose()
+
+    assert record.qi_1 is None
+    assert record.tpm_overlap_gm is None
+    assert record.tpm_overlap_wm is None

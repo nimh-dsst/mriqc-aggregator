@@ -82,10 +82,11 @@ That builds and starts:
 2. `api` on `http://127.0.0.1:${API_PORT:-8000}/docs`
 3. `frontend` on `http://127.0.0.1:${FRONTEND_PORT:-5173}`
 
-The API container initializes the current SQLAlchemy schema on startup before
-serving requests. The database remains accessible from the host via the same
-`MRIQC_DATABASE_URL` in `.env`, so you can still run `pixi run db-load` and
-`pixi run db-profile` against the compose-managed Postgres instance.
+The API container initializes the current SQLAlchemy schema and applies Alembic
+migrations on startup before serving requests. The database remains accessible
+from the host via the same `MRIQC_DATABASE_URL` in `.env`, so you can still run
+`pixi run db-load` and `pixi run db-profile` against the compose-managed
+Postgres instance. To run migrations explicitly, use `pixi run db-migrate`.
 
 Local development uses `compose.yaml` plus the automatically loaded
 `compose.override.yaml`. That keeps the dev stack simple:

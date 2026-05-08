@@ -20,6 +20,8 @@ WORKDIR /app
 
 COPY pixi.toml pyproject.toml README.md /app/
 COPY mriqc_aggregator /app/mriqc_aggregator
+COPY alembic.ini /app/alembic.ini
+COPY migrations /app/migrations
 COPY scripts /app/scripts
 
 RUN pixi install

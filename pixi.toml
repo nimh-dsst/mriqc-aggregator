@@ -8,6 +8,7 @@ pytest = ">=8.3,<9"
 pytest-cov = ">=5,<7"
 ruff = ">=0.11,<0.12"
 pre-commit = ">=4.2,<5"
+alembic = ">=1.16,<2"
 
 [pypi-dependencies]
 mriqc-aggregator = { path = ".", editable = true }
@@ -26,6 +27,7 @@ db-init = "python scripts/init_db.py"
 db-load = "python scripts/load_raw_run.py"
 db-load-dump = "python scripts/load_dump.py"
 db-profile = "python scripts/profile_db.py"
+db-migrate = "python scripts/migrate_db.py"
 api-dev = "uvicorn mriqc_aggregator.app:create_app --factory --reload"
 stack-up = "docker compose up --build -d"
 stack-logs = "docker compose logs -f api postgres"
