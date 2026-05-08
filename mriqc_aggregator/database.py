@@ -6,6 +6,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
 from .canonical_views import ensure_canonical_views
+from .migration import run_migrations
 from .models import Base
 
 
@@ -35,6 +36,7 @@ def create_database_schema(url: str | None = None, *, echo: bool = False) -> Non
     engine = create_database_engine(url=url, echo=echo)
     with engine.begin() as connection:
         Base.metadata.create_all(connection)
+        run_migrations(connection)
         for table in Base.metadata.sorted_tables:
             for index in table.indexes:
                 index.create(connection, checkfirst=True)
